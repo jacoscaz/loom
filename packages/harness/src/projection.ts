@@ -31,7 +31,8 @@ export interface ProjectOptions {
   /**
    * How media blocks are represented. Per-medium, not uniform: image and
    * voice differ in what every audience can do with them (a visual-model
-   * wire keeps images but no current wire carries native audio).
+   * wire keeps images; an audio-capable openai-style wire keeps voice as
+   * native input_audio — since 2026-09-26).
    * - 'keep': pass through untouched (visual model wire, mirrors);
    * - 'placeholder': replace with a visible text marker;
    * - 'omit': drop entirely.

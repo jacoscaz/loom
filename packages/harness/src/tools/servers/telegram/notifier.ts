@@ -64,12 +64,33 @@ async function handleUpdate(
         transcription = `[transcription failed: ${err instanceof Error ? err.message : String(err)}]`;
         log.error('voice note transcription failed: %s', err instanceof Error ? err.message : String(err));
       }
+      // Audio-to-substrate: when a model declares audio input the raw
+      // sound must survive, not just the transcript. Convert ONCE at
+      // ingest (ogg/opus -> 16k mono wav) and inline base64 in the
+      // block — ImageBlock durability: `path`'s temp file expires in an
+      // hour, history replays longer. Conversion failure is loud in
+      // logs and degrades to transcript-only: the transcript remains
+      // the guaranteed channel, audio is additive.
+      let data: string | undefined;
+      try {
+        const { execFile } = await import('node:child_process');
+        const { promisify } = await import('node:util');
+        const wavPath = await ctx.files.tempPath(new Date(Date.now() + 3_600_000), 'wav');
+        await promisify(execFile)('ffmpeg', ['-y', '-i', path, '-ar', '16000', '-ac', '1', '-sample_fmt', 's16', wavPath]);
+        const { readFile } = await import('node:fs/promises');
+        data = (await readFile(wavPath)).toString('base64');
+        log.info('voice note audio inlined for substrate delivery: %s', wavPath);
+      } catch (err) {
+        log.error('voice note audio conversion failed (transcript unaffected): %s', err instanceof Error ? err.message : String(err));
+      }
       content.push({
         type: 'voice',
         path,
         mimeType: 'audio/ogg',
         duration: message.voice.duration,
         transcription,
+        data,
+        dataFormat: data ? 'wav' : undefined,
       });
     } catch (err) {
       log.error('voice note download failed: %s', err instanceof Error ? err.message : String(err));

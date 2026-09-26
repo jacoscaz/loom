@@ -32,6 +32,16 @@ export interface VoiceBlock extends BaseBlock {
   mimeType: string;
   duration: number;
   transcription?: string;
+  /**
+   * Wire-ready audio (base64), inlined at ingest — wav 16k mono, the
+   * speech-model lingua franca. Mirrors ImageBlock durability: `path`
+   * points at a temp file that expires; the block replays for as long
+   * as history does, so the bytes live HERE. Optional: conversion
+   * failure degrades to transcript-only, loudly in logs.
+   */
+  data?: string;
+  /** Format of `data` for the wire (input_audio.format). */
+  dataFormat?: 'wav' | 'mp3';
 }
 
 export type ContentBlock = TextBlock | ImageBlock | VoiceBlock;

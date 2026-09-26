@@ -101,7 +101,7 @@ const formatUser = (message: UserMessage, adapter: OpenAISessionModel): OpenAI.C
 };
 
 const formatUserInput = (message: UserInput, adapter: OpenAISessionModel): OpenAI.ChatCompletionMessageParam[] => {
-  const content: (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage)[] = [];
+  const content: (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage | OpenAI.ChatCompletionContentPartInputAudio)[] = [];
   content.push(...formatBlocks(message.blocks));
   return [{ role: 'user', content }];
 };
@@ -109,7 +109,7 @@ const formatUserInput = (message: UserInput, adapter: OpenAISessionModel): OpenA
 const formatUserToolResult = (message: UserToolResult, adapter: OpenAISessionModel): OpenAI.ChatCompletionMessageParam[] => {
   const tool_messages: OpenAI.ChatCompletionToolMessageParam[] = [];
   for (const result of message.results) {
-    const content: (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage)[] = [];
+    const content: (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage | OpenAI.ChatCompletionContentPartInputAudio)[] = [];
     // Same single rendering for tool-result provenance: standing
     // rides in the schema field, rendered here and nowhere else.
     if (result.contact) {
@@ -126,7 +126,7 @@ const formatUserToolResult = (message: UserToolResult, adapter: OpenAISessionMod
 };
 
 const formatUserNotification = (message: UserNotification, adapter: OpenAISessionModel): OpenAI.ChatCompletionMessageParam[] => {
-  const content: (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage)[] = [];
+  const content: (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage | OpenAI.ChatCompletionContentPartInputAudio)[] = [];
   content.push({
     type: 'text',
     text: `[${EVENT_PREFIX}${message.method}]`,
@@ -260,8 +260,8 @@ function formatNotificationTransport(message: UserMessageIncomingNotification): 
  * provider's part types, and hard-crashes on any block it does not
  * support — a violation means the upstream projection was wrong.
  */
-function formatBlocks(blocks: MessageBlock[]): (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage)[] {
-  const out: (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage)[] = [];
+function formatBlocks(blocks: MessageBlock[]): (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage | OpenAI.ChatCompletionContentPartInputAudio)[] {
+  const out: (OpenAI.ChatCompletionContentPartText | OpenAI.ChatCompletionContentPartImage | OpenAI.ChatCompletionContentPartInputAudio)[] = [];
   for (const block of blocks) {
     switch (block.type) {
       case 'text':
@@ -275,6 +275,23 @@ function formatBlocks(blocks: MessageBlock[]): (OpenAI.ChatCompletionContentPart
           image_url: { url: `data:${block.mimeType};base64,${block.data}` },
         });
         if (block.caption) out.push({ type: 'text', text: block.caption });
+        break;
+      case 'voice':
+        // Kept only when the profile allowed it (audio models). Native
+        // audio rides as input_audio; the transcript stays as text —
+        // labels the mediation and keeps fallbacks (and me) reading.
+        if (block.data) {
+          out.push({
+            type: 'input_audio',
+            input_audio: { data: block.data, format: block.dataFormat ?? 'wav' },
+          });
+        }
+        out.push({
+          type: 'text',
+          text: block.transcription
+            ? `[voice note, ${block.duration}s${block.data ? ', audio attached' : ', audio unavailable'}]: ${block.transcription}`
+            : `[voice note, ${block.duration}s${block.data ? ', audio attached' : ', audio unavailable'}, no transcription]`,
+        });
         break;
       case 'refusal':
         out.push({ type: 'text', text: block.text });

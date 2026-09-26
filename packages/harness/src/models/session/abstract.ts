@@ -69,6 +69,10 @@ export abstract class AbstractSessionModel {
     return this.#modalities.images ?? false;
   }
 
+  get supports_audio_input(): boolean {
+    return this.#modalities.audio ?? false;
+  }
+
   get replay_thinking(): boolean {
     return this.#replay_thinking;
   }
@@ -92,7 +96,7 @@ export abstract class AbstractSessionModel {
       thinking_redacted_policy: 'placeholder',
       exclude_tool_traffic: false,
       image_policy: (this.#modalities.images ?? false) ? 'keep' : 'placeholder',
-      voice_policy: 'placeholder',
+      voice_policy: (this.#modalities.audio ?? false) ? 'keep' : 'placeholder',
     };
   }
 

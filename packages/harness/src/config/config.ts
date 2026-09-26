@@ -20,10 +20,13 @@ export interface ConfigPostgres {
  * Content modalities a model can consume/produce. Defaults to text-only when
  * absent. The session runner filters content blocks unsupported by the active
  * model before sending (e.g., images to a text-only model are replaced with
- * placeholder notices rather than sent).
+ * placeholder notices rather than sent; voice likewise, or kept as native
+ * audio on audio-capable wires).
  */
 export interface ConfigModalities {
   images?: boolean;
+  /** Model accepts native audio input (voice notes project as input_audio). */
+  audio?: boolean;
 }
 
 export interface ConfigModelBase {
