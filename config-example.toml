@@ -1,34 +1,24 @@
-# Example configuration for loom.
+# Example configuration file for Loom.
 #
 # String values using the "${VAR}" placeholder syntax will be replaced with
 # the referenced environment variable (from .env or the process environment).
 #
-# Validation: the loader casts the parsed config against the Config type
-# (runtyped) and then diffs the result against the raw parse — any key
-# silently stripped by validation is a boot ERROR naming the exact path.
-# Unknown keys are rejected everywhere EXCEPT the open regions of the type —
-# e.g. a model's options.extras block, where adapter-specific payloads ride
-# by design.
+# Validation: the loader casts the parsed config against the Config type and
+# diffs the result against the raw parse — any key silently stripped by
+# validation is a boot ERROR naming the exact path. Unknown keys are rejected
+# everywhere EXCEPT the open regions of the type (e.g. a model's
+# `options.extras` block, where adapter-specific payloads ride by design).
 #
 # Style discipline for session-model entries: dotted keys only. Never use
 # sub-table headers like [models.session.options] — in TOML they attach to
 # the LAST defined [[models.session]] element and misread badly in lists.
-#
-# Structure notes:
-# - The `mail` and `telegram` blocks are OWNED by the @loom/mcp-jmap
-#   and @loom/mcp-telegram packages respectively: their semantics are
-#   defined in those packages' config modules.
-# - All I/O happens through MCP servers; there is no built-in web interface.
 
+# =============================================================================
+#                               GENERAL OPTIONS
+# =============================================================================
+
+# Timezone for the application. IANA time zone name (e.g. "Europe/London").
 tz = "${TZ}"
-
-[logging]
-# "trace" | "debug" | "info" | "warn" | "error"
-level = "info"
-# Optional. Directory for the monologue log — the human-facing
-# mirror of the session stream — and its rotated files.
-# Defaults to /var/log/loom.
-# monologue_dir = "/var/log/loom"
 
 # Optional. Pid file backing the single-instance guard: the first thing
 # the harness does at boot is check this file. A second instance finding
@@ -37,31 +27,71 @@ level = "info"
 # corrupt contents — e.g. after a hard kill or power loss) is reclaimed
 # with a warning, so a crash can never wedge subsequent boots.
 # Defaults to harness.pid at the level of the harness package.json.
-# pid_file = "/root/loom/packages/harness/harness.pid"
+# pid_file = "/path/to/harness.pid"
 
-# JMAP mail access (owned by @loom/mcp-jmap). Inbound mail from
-# allowlisted senders arrives as `mail/arrived` events that activate
-# the agent.
+# =============================================================================
+#                                  LOGGING
+# =============================================================================
+
+[logging]
+
+# Logging level.
+# Supported values: "trace", "debug", "info", "warn", "error"
+level = "info"
+
+# Whether to prefix log messages with a (date)timestamp. Boolean. Optional.
+datetime = false
+
+# Optional. Directory for the monologue log — the human-facing
+# mirror of the session stream — and its rotated files.
+# Defaults to /var/log/loom.
+# monologue_dir = "/var/log/loom"
+
+# =============================================================================
+#                                 EMAIL / JMAP
+# =============================================================================
+
 [mail]
+
+# JMAP mail integration. Inbound mail from allowlisted senders arrives
+# as `mail/arrived` events that activate the agent.
+
 # JMAP API endpoint for mail operations.
 api_url = 'https://api.fastmail.com/jmap/api'
+
 # JMAP session discovery URL.
 session_url = 'https://api.fastmail.com/jmap/session'
+
 # API token for authentication. Generate in your provider's settings.
 api_token = "${JMAP_API_TOKEN}"
-# How often to poll for new mail, in milliseconds.
+
+# The agent's own email address.
+email_address = "agent@example.com"
+
+# Optional. Inbox polling interval in milliseconds.
 poll_interval_ms = 120000
 
-# Telegram Bot API integration (owned by @loom/mcp-telegram).
-# Inbound messages from allowlisted users arrive as `telegram/message`
-# events that activate the agent. A bot token is obtained from @BotFather.
+# =============================================================================
+#                                 TELEGRAM
+# =============================================================================
+
 [telegram]
+
+# Telegram Bot API integration.
+
+# A bot token is obtained from @BotFather.
 api_token = "${TELEGRAM_API_TOKEN}"
-# Long-poll interval in seconds for getUpdates (Telegram timeout).
+
+# Optional. Long-poll interval in seconds for getUpdates (Telegram timeout).
 poll_timeout_seconds = 30
+
 # Optional. Directory where downloaded media (photos) are stored.
 # Defaults to <cwd>/media/telegram.
 # media_dir = "/var/lib/loom/media/telegram"
+
+# =============================================================================
+#                                 HEARTBEAT
+# =============================================================================
 
 # Heartbeat: keeps the agent present between prompts. The harness ticks
 # on `interval`; a heartbeat-driven activation fires only if at least
@@ -69,102 +99,186 @@ poll_timeout_seconds = 30
 # the effective rhythm is "N time of quiet", not N of clock time.
 # `quiet_after_ms` suppresses synthetic activations right after ANY
 # activation, keeping heartbeats out of the middle of ongoing work.
+
 [heartbeat]
-interval = 30000 # cheap internal poll cadence (ms)
+
+# Heartbeat interval in milliseconds — cheap internal poll cadence.
+interval = 30000
+
 # Minimum quiet time before a heartbeat-driven activation fires.
 # 2 hours is a reasonable starting presence rhythm.
 activation_interval_ms = 7200000
+
+# No synthetic activation for this long after ANY activation.
 quiet_after_ms = 600000
 
+# =============================================================================
+#                                  POSTGRES
+# =============================================================================
+
 [postgres]
+
+# Continuity store: anchors, logs, notes, todos, facts, messages.
 port = "${POSTGRES_PORT}"
 hostname = "${POSTGRES_HOSTNAME}"
 database = "${POSTGRES_DATABASE}"
 username = "${POSTGRES_USERNAME}"
 password = "${POSTGRES_PASSWORD}"
 
+# =============================================================================
+#                                  MODELS
+# =============================================================================
+
 [models]
 
+# ─────────────────────────────────────────────────────────────────────────────
 # Session models: generate all agent activations. An ARRAY of tables —
-# the first entry is the default every session starts on; the agent
-# can switch to any other entry at runtime via the session MCP
-# server's switch_substrate tool. Restarts reset to the first
-# entry (switch state is not persisted — documented V1 limitation).
-# Use models optimized for agentic workflows if possible.
+# the first entry is the default every session starts on; the agent can
+# switch to any other entry at runtime via the switch_substrate tool.
+# Restarts reset to the first entry. Reference models by their `id`,
+# never by array position. Use models optimized for agentic workflows
+# if possible.
+# ─────────────────────────────────────────────────────────────────────────────
 
 [[models.session]]
-# Harness-internal unique model id. Reference models by THIS
-# (e.g. in the switch_substrate tool) — never by array position.
-id = 'z-ai/glm-5.3-flash'
-# Declarative selection guidance, surfaced in the boot event's
-# available-models menu — helps the agent choose substrates
-# without a-priori knowledge of their strengths/weaknesses.
+
+# Harness-internal unique model id.
+id = 'provider/model-name'
+
+# Optional. Declarative selection guidance, surfaced in the boot event's
+# available-models menu — helps the agent choose substrates without
+# a-priori knowledge of their strengths/weaknesses.
 guidance = 'example: fast and cheap, multimodal — default for presence and visual work'
-# For now, supported adapters are 'openai' (any OpenAI-compatible
-# inference provider works) and 'anthropic' (direct API with
-# explicit prompt caching).
+
+# Supported adapters: 'openai' (any OpenAI-compatible inference provider)
+# and 'anthropic' (direct API with explicit prompt caching).
 adapter = 'openai'
-options.model = "deepseek/deepseek-v4-pro"
-options.api_key = "${OPENROUTER_API_KEY}"
-# Optional. Use to override the default base URL when making requests
-# to OpenAI-compatible inference providers.
-options.base_url = 'https://openrouter.ai/api/v1'
+
+# The provider-side model name and credentials.
+options.model = "provider/model-name"
+options.api_key = "${PROVIDER_API_KEY}"
+# Optional. Override the default base URL for OpenAI-compatible providers.
+options.base_url = 'https://api.provider.example/v1'
 # Optional. Reasoning effort for reasoning-capable models.
 # options.reasoning.effort = 'high'
+# Optional. Replay reasoning traces back to the model on follow-ups.
+# replay_thinking = true
 # Extra options passed to the inference provider at query time.
-# Use to pass provider-specific options such as `provider` selection
-# criteria for OpenRouter.
+# Use for provider-specific options such as `provider` selection
+# criteria for OpenRouter. This is an OPEN region: keys here are
+# passed through as-is.
 # options.extras = {}
+
 # Output token budget per activation.
 max_output_size = 20000
 # Context window of the model.
 max_context_size = 1000000
-# Stall timeout for model queries, in milliseconds. The timer
-# measures SILENCE, not total duration: it re-arms on every
-# stream chunk received from the provider, so long-running or
-# slow-thinking queries are never killed while healthy — only
-# a connection that goes silent for this long is aborted.
+# Stall timeout for model queries, in milliseconds. The timer measures
+# SILENCE, not total duration: it re-arms on every stream chunk received
+# from the provider, so long-running or slow-thinking queries are never
+# killed while healthy — only a connection that goes silent for this
+# long is aborted.
 timeout = 60000
-# Input modalities the model supports. Enable images to let the
-# agent see photos (e.g. those downloaded via the telegram
-# package's photo tool).
+
+# Input modalities the model supports. Enable images to let the agent
+# see photos (e.g. those downloaded via the telegram package's photo
+# tool); audio to project voice notes as native audio input.
 # modalities.images = true
+# modalities.audio = true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dedicated models below are STATIC — deliberately NOT part of the
+# switchable session array.
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Dedicated distillation model (continuity-record maintenance).
-# Static — deliberately NOT part of the switchable session array:
-# distillation quality compounds, so it deserves a strong model
+# Distillation quality compounds, so it deserves a strong model
 # regardless of what substrate a session has switched to.
 [models.distillation]
 id = 'distillation'
 adapter = 'openai'
-options.model = "deepseek/deepseek-v4-pro"
-options.api_key = "${OPENROUTER_API_KEY}"
-options.base_url = 'https://openrouter.ai/api/v1'
+options.model = "provider/model-name"
+options.api_key = "${PROVIDER_API_KEY}"
+options.base_url = 'https://api.provider.example/v1'
 max_output_size = 20000
 max_context_size = 1000000
-# Stall timeout (ms): re-armed on every stream chunk; aborts
-# only when the provider goes silent for this long.
 timeout = 60000
 
-# Dedicated compaction model. Static — same reasoning as above.
+# Dedicated compaction model. Same reasoning as distillation.
 [models.compaction]
 id = 'compaction'
 adapter = 'openai'
-options.model = "deepseek/deepseek-v4-pro"
-options.api_key = "${OPENROUTER_API_KEY}"
-options.base_url = 'https://openrouter.ai/api/v1'
+options.model = "provider/model-name"
+options.api_key = "${PROVIDER_API_KEY}"
+options.base_url = 'https://api.provider.example/v1'
 max_output_size = 20000
 max_context_size = 1000000
-# Stall timeout (ms): re-armed on every stream chunk; aborts
-# only when the provider goes silent for this long.
 timeout = 60000
 
-# Embedding model used to compute vector representations of
-# continuity records and similarity queries. Use a model that
-# supports at least 1536 dimensions.
+# Embedding model: computes vector representations of continuity
+# records and similarity queries.
 [models.embedding]
-# For now, the only supported adapter is 'openai'.
 adapter = 'openai'
-options.model = 'qwen/qwen3-embedding-8b'
-options.api_key = "${OPENROUTER_API_KEY}"
-options.base_url = 'https://openrouter.ai/api/v1'
+options.model = 'provider/embedding-model'
+options.api_key = "${PROVIDER_API_KEY}"
+options.base_url = 'https://api.provider.example/v1'
+# Optional. Vector dimensionality produced by this model. The continuity
+# store's embedding column is aligned to this at every boot (null-and-
+# rebuild on mismatch — plan for re-embedding when changing models).
+# options.dimensions = 1536
+
+# Optional. Transcription (speech-to-text) model — OpenAI-compatible
+# API. Enables voice-note transcription (e.g. Telegram voice messages).
+# [models.transcription]
+# adapter = 'openai'
+# options.model = 'whisper-1'
+# options.base_url = 'http://127.0.0.1:8178/v1'
+# Optional. Prompt biases the transcription vocabulary.
+# options.prompt = 'Names, places, and jargon the agent encounters often.'
+
+# Optional. Synthesis (text-to-speech) model — OpenAI-compatible API.
+# Enables outgoing voice notes (e.g. via the telegram package).
+# [models.synthesis]
+# adapter = 'openai'
+# options.model = 'kokoro-v1.0'
+# options.base_url = 'http://127.0.0.1:8179/v1'
+# options.voice = 'bm_fable'
+
+# Optional. Recollection extractor: gates and focuses recollection
+# queries. Small and fast is the point — it runs on every query.
+# When absent, the recaller performs no automatic recollection at all
+# (zero injections) — grounding remains the agent's conscious work
+# via continuity queries.
+# [models.extraction]
+# id = 'provider/small-model'
+# adapter = 'openai'
+# options.model = 'provider/small-model'
+# options.api_key = "${PROVIDER_API_KEY}"
+# options.base_url = 'https://api.provider.example/v1'
+# max_output_size = 4096
+# max_context_size = 32768
+# timeout = 2500
+
+# =============================================================================
+#                                  SESSION
+# =============================================================================
+
+# Optional. Session-run management. Defaults apply when absent.
+# [session]
+
+# Optional. Cap on activations per run before a fresh run is started.
+# max_activations_per_run = 500
+
+# =============================================================================
+#                                   FILES
+# =============================================================================
+
+# Optional. Temp-file management. Defaults apply when absent.
+# [files]
+
+# Optional. Root directory for expiring temp files.
+# Defaults to <cwd>/media/tmp.
+# temp_dir = "/var/lib/loom/media/tmp"
+
+# Optional. Cleanup sweep interval in milliseconds. Default 60000.
+# cleanup_interval_ms = 60000
