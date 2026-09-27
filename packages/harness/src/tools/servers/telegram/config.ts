@@ -1,9 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import JSON5 from "json5";
-import { cast } from "@runtyped/type";
-import { fillEnvVarsPlaceholders } from "@loom/utils";
-
 /**
  * Configuration of the Telegram MCP server. Owned by this package.
  */
