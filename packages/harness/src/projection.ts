@@ -240,6 +240,12 @@ const projectBlock = (block: MessageBlock, opts: ProjectOptions): MessageBlock |
       // Unknown content always survives, loudly, in every profile.
       return block;
 
+    case 'tool_req':
+      // Tool requests survive as blocks unless tool traffic is excluded —
+      // the block-level form of the message-level policy above: the turn's
+      // text is kept, its calls dropped.
+      return opts.exclude_tool_traffic ? null : block;
+
     default:
       // Block types the projection layer does not know about pass through
       // untouched; the serializer renders them visibly. Silent loss needs

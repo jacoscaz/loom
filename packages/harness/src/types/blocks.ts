@@ -67,12 +67,26 @@ export interface UnsupportedBlock extends BaseBlock {
   text: string;
 }
 
+/**
+ * A tool call request as a BLOCK within an agent turn — one request per
+ * block, req_id correlating with UserToolResult.results. Native shape
+ * since 2026-09-26 (ToolRequestBlock within AgentInput): reasoning,
+ * text and tool calls live in ONE message, preserving the model's
+ * grouping end to end.
+ */
+export interface ToolRequestBlock extends BaseBlock {
+  type: 'tool_req';
+  req_id: string;
+  tool: string;
+  params: any;
+}
+
 export type MessageBlock =
   | TextBlock
   | ImageBlock
   | VoiceBlock
   | RefusalBlock
-  // | ToolUseRequestBlock
+  | ToolRequestBlock
   // | ToolUseResultBlock
   // | ToolUseErrorBlock
   | ThinkingBlock

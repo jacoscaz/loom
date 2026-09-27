@@ -162,6 +162,7 @@ const formatAgentInput = (message: AgentInput, adapter: OpenAISessionModel): Ope
   const refusal: string[] = [];
   const content: string[] = [];
   const thinking: string[] = [];
+  const tool_calls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
   for (const block of message.blocks) {
     switch (block.type) {
       case 'text':
@@ -180,6 +181,18 @@ const formatAgentInput = (message: AgentInput, adapter: OpenAISessionModel): Ope
         // parsers.ts) replays as loud marked text, never silently.
         content.push(`[unsupported] ${block.text}`);
         break;
+      case 'tool_req':
+        // Native shape: calls ride in the same assistant message as the
+        // reasoning and text that produced them — one turn, one message.
+        tool_calls.push({
+          id: block.req_id,
+          type: 'function',
+          function: {
+            name: block.tool,
+            arguments: JSON.stringify(block.params),
+          },
+        });
+        break;
       default:
         throw new Error(`formatAgentInput: unsupported block type '${block.type}' — upstream projection leaked a block the formatter cannot represent`);
     }
@@ -189,6 +202,7 @@ const formatAgentInput = (message: AgentInput, adapter: OpenAISessionModel): Ope
     refusal: refusal.length ? refusal.join(' ') : undefined,
     content: content.length ? content.join(' ') : undefined,
     reasoning_content: thinking.length ? thinking.join(' ') : undefined,
+    tool_calls: tool_calls.length ? tool_calls : undefined,
   } as OpenAI.ChatCompletionMessageParam];
 };
 

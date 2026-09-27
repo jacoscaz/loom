@@ -5,7 +5,7 @@ import { parseMessage } from "./parsers.js";
 import { formatMessages } from "./formatters.js";
 import { projectMessages } from "../../../../projection.js";
 import { type AnthropicSessionModel } from "./anthropic.js";
-import { type AgentInput, type AgentToolRequest, type Message } from "../../../../types/messages.js";
+import { type AgentInput, type Message } from "../../../../types/messages.js";
 
 /**
  * Adapter-level guarantees for the Anthropic Messages API:
@@ -35,7 +35,7 @@ const FAKE_ADAPTER = {
 
 const asMessage = (m: Anthropic.Message): Anthropic.Message => m;
 
-test('parseMessage: tool_use blocks produce one AgentToolRequest with the ids preserved', () => {
+test('parseMessage: tool_use blocks become tool_req blocks within the AgentInput', () => {
   const response = asMessage({
     id: 'msg_1',
     role: 'assistant',
@@ -48,15 +48,13 @@ test('parseMessage: tool_use blocks produce one AgentToolRequest with the ids pr
   } as unknown as Anthropic.Message);
 
   const messages = parseMessage(response);
-  const input = messages.find(m => m.type === 'input') as AgentInput;
-  const tools = messages.find(m => m.type === 'tool_req') as AgentToolRequest;
-  assert.equal(messages.length, 2);
-  assert.equal(tools.requests.length, 2);
-  assert.deepEqual(
-    tools.requests.map(r => r.req_id),
-    ['toolu_1', 'toolu_2'],
-  );
-  assert.equal(tools.requests[0].params.command, 'ls');
+  assert.equal(messages.length, 1, 'one canonical message per response');
+  const input = messages[0] as AgentInput;
+  const reqs = input.blocks.filter(b => b.type === 'tool_req') as { req_id: string; tool: string; params: { command?: string } }[];
+  assert.equal(reqs.length, 2);
+  assert.deepEqual(reqs.map(r => r.req_id), ['toolu_1', 'toolu_2']);
+  assert.equal(reqs[0]?.tool, 'shell_exec');
+  assert.equal(reqs[0]?.params.command, 'ls');
   assert.ok(input.blocks.some(b => b.type === 'text' && b.text === 'Checking now.'));
 });
 
@@ -124,6 +122,28 @@ test('formatMessages: an agent turn (input + tool_req) merges into ONE assistant
   assert.equal(tool_use.name, 'shell_exec');
   // thinking stripped: replay_thinking false
   assert.ok(!content.some(b => b.type === 'thinking'));
+});
+
+test('formatMessages: a native turn with tool_req blocks projects as ONE assistant message', () => {
+  const history: Message[] = [
+    { role: 'user', type: 'input', blocks: [{ type: 'text', text: 'run it' }] },
+    {
+      role: 'agent', type: 'input',
+      blocks: [
+        { type: 'text', text: 'Running.' },
+        { type: 'tool_req', req_id: 'toolu_9', tool: 'shell_exec', params: { command: 'ls' } },
+      ],
+    },
+  ];
+
+  const wire = formatMessages(projectMessages(history, FAKE_ADAPTER.projection), FAKE_ADAPTER);
+  assert.equal(wire.length, 2, 'user + ONE assistant message — no merging needed, the turn is one message');
+  const content = wire[1].content as Anthropic.ContentBlockParam[];
+  assert.ok(content.some(b => b.type === 'text' && (b as any).text === 'Running.'));
+  const tool_use = content.find(b => b.type === 'tool_use') as any;
+  assert.equal(tool_use.id, 'toolu_9');
+  assert.equal(tool_use.name, 'shell_exec');
+  assert.deepEqual(tool_use.input, { command: 'ls' });
 });
 
 test('formatMessages: consecutive user messages merge, preserving block order', () => {

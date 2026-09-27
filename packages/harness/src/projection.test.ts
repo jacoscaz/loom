@@ -236,3 +236,24 @@ test('projectMessages drops tool traffic without leaving holes', () => {
     assert.ok(m.type !== 'tool_req' && m.type !== 'tool_res');
   }
 });
+
+test('projectMessage: exclude_tool_traffic strips tool_req blocks but keeps the turn text', () => {
+  const turn: Message = {
+    role: 'agent',
+    type: 'input',
+    blocks: [
+      { type: 'text', text: 'calling now' },
+      { type: 'tool_req', req_id: 'r1', tool: 'shell_exec', params: { command: 'ls' } },
+    ],
+  };
+
+  // The distillation profile is the tool-traffic-excluding one: with the
+  // block model, the message-level policy becomes block-level without
+  // changing its meaning — the turn's text survives, its calls drop.
+  const projected = projectMessage(turn, PROJECT_DISTILLATION_OPTS) as Extract<Message, { role: 'agent'; type: 'input' }>;
+  assert.ok(projected, 'the turn itself is kept');
+  assert.deepEqual(projected.blocks.map(b => b.type), ['text']);
+
+  const kept = projectMessage(turn, PROJECT_MONOLOGUE_LOGGING_OPTS) as Extract<Message, { role: 'agent'; type: 'input' }>;
+  assert.deepEqual(kept.blocks.map(b => b.type), ['text', 'tool_req']);
+});

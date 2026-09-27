@@ -54,16 +54,29 @@ export class Compactor extends WithContext {
 
       let split_index = raw_messages.length - retain_count;
 
-      // Compaction can never break the ordered pair comprised of an agent
-      // message carrying tool use requests and the following user message
-      // carrying their results/errors. With results grouped in one user
-      // message, the pair is simply (agent, next message): if the split
-      // index lands on the results message, move it back to the request.
+      // Compaction can never break tool requests away from their results,
+      // nor (legacy rows) an agent turn away from its calls. With results
+      // grouped in one user message, the pair is (request-holder, next
+      // message): a split landing on the results message moves back to the
+      // holder — an AgentInput carrying tool_req blocks (native shape) or
+      // a standalone tool_req message (legacy). The legacy holder is then
+      // kept whole with its own preceding AgentInput: a split between an
+      // agent's text and its calls is the mid-turn incoherence this guard
+      // exists to prevent (structurally impossible for native rows).
       if (raw_messages[split_index]?.data.type === 'tool_res') {
         split_index -= 1;
-        if (raw_messages[split_index]?.data.type !== 'tool_req') {
+        const holder = raw_messages[split_index]?.data;
+        const holds_requests = holder?.type === 'tool_req'
+          || (holder?.type === 'input' && holder.role === 'agent'
+              && holder.blocks.some((b) => b.type === 'tool_req'));
+        if (!holds_requests) {
           throw new Error(`invalid tool use request/result pair at index ${split_index}`);
         }
+      }
+      if (raw_messages[split_index]?.data.type === 'tool_req'
+          && raw_messages[split_index - 1]?.data.role === 'agent'
+          && raw_messages[split_index - 1]?.data.type === 'input') {
+        split_index -= 1;
       }
 
       const to_summarize = raw_messages.slice(0, split_index);

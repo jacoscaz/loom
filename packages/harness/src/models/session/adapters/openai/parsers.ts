@@ -3,7 +3,6 @@ import OpenAI from 'openai';
 
 import {
   type AgentInput,
-  type AgentToolRequest,
   type AgentMessage,
 } from "../../../../types/messages.js";
 import { type UnsupportedBlock } from "../../../../types/blocks.js";
@@ -21,11 +20,9 @@ export const parseMessage = (message: OpenAI.ChatCompletionMessage): AgentMessag
     type: 'input',
     blocks: [],
   };
-  const tools: AgentToolRequest = {
-    role: 'agent',
-    type: 'tool_req',
-    requests: [],
-  };
+  // Tool requests are blocks WITHIN the turn (see types/messages.ts):
+  // the response's grouping — content and tool_calls together — is
+  // preserved end to end.
   if (message.content) {
     input.blocks.push({
       type: 'text',
@@ -48,7 +45,8 @@ export const parseMessage = (message: OpenAI.ChatCompletionMessage): AgentMessag
     for (const call of message.tool_calls) {
       if (call.type === 'function') {
         const params = parseFunctionCallArgs(call);
-        tools.requests.push({
+        input.blocks.push({
+          type: 'tool_req',
           req_id: call.id,
           tool: call.function.name,
           params,
@@ -65,10 +63,7 @@ export const parseMessage = (message: OpenAI.ChatCompletionMessage): AgentMessag
   if (message.annotations && message.annotations.length > 0) {
     input.blocks.push(asUnsupported('annotations', message.annotations));
   }
-  const parsed = [];
-  if (input.blocks.length > 0) parsed.push(input);
-  if (tools.requests.length > 0) parsed.push(tools);
-  return parsed.length > 0 ? parsed : [];
+  return input.blocks.length > 0 ? [input] : [];
 };
 
 /**

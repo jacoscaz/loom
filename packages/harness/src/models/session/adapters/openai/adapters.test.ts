@@ -262,3 +262,108 @@ test('formatMessages: a kept voice block without data degrades to transcript tex
   assert.ok(user.content[0]?.text?.includes('audio unavailable'));
   assert.ok(user.content[0]?.text?.includes('just text'));
 });
+
+/**
+ * Native turn shape (2026-09-26, ToolRequestBlock within AgentInput):
+ * tool calls are blocks INSIDE the turn — reasoning, text and calls
+ * project as ONE assistant message with no wire-level folding. The fold
+ * guarantees above are legacy-compat for history rows only.
+ */
+
+test('parseMessage: tool_calls become tool_req blocks within the AgentInput', () => {
+  const response = {
+    role: 'assistant',
+    content: 'Calling now.',
+    reasoning_content: 'the reasoning',
+    tool_calls: [
+      { id: 'r1', type: 'function', function: { name: 'shell_exec', arguments: '{"command":"ls"}' } },
+      { id: 'r2', type: 'function', function: { name: 'file_read', arguments: '{"path":"/a"}' } },
+    ],
+  } as unknown as OpenAI.ChatCompletionMessage;
+
+  const messages = parseMessage(response);
+  assert.equal(messages.length, 1, 'one canonical message per response');
+  const input = messages[0] as AgentInput;
+  const reqs = input.blocks.filter(b => b.type === 'tool_req') as { req_id: string; tool: string; params: { command?: string } }[];
+  assert.equal(reqs.length, 2);
+  assert.deepEqual(reqs.map(r => r.req_id), ['r1', 'r2']);
+  assert.equal(reqs[0]?.tool, 'shell_exec');
+  assert.equal(reqs[0]?.params.command, 'ls');
+  assert.ok(input.blocks.some(b => b.type === 'text'));
+  assert.ok(input.blocks.some(b => b.type === 'thinking'));
+});
+
+test('formatMessages: a native turn with tool_req blocks projects as ONE assistant message', () => {
+  const messages: Message[] = [
+    {
+      role: 'agent',
+      type: 'input',
+      blocks: [
+        { type: 'thinking', text: 'the reasoning' },
+        { type: 'text', text: 'calling now' },
+        { type: 'tool_req', req_id: 'r1', tool: 'shell_exec', params: { command: 'ls' } },
+      ],
+    },
+  ];
+
+  const wire = formatMessages(messages, FAKE_THINKING_ADAPTER);
+  assert.equal(wire.length, 1, 'no folding needed — the turn is one message');
+  const assistant = wire[0] as {
+    role: string;
+    reasoning_content?: string;
+    content?: string;
+    tool_calls?: { id: string; function: { name: string } }[];
+  };
+  assert.equal(assistant.role, 'assistant');
+  assert.equal(assistant.reasoning_content, 'the reasoning');
+  assert.ok(assistant.content?.includes('calling now'));
+  assert.equal(assistant.tool_calls?.length, 1);
+  assert.equal(assistant.tool_calls?.[0]?.id, 'r1');
+  assert.equal(assistant.tool_calls?.[0]?.function?.name, 'shell_exec');
+});
+
+test('round trip: a native turn survives format -> parse with its grouping intact', () => {
+  const turn: Message = {
+    role: 'agent',
+    type: 'input',
+    blocks: [
+      { type: 'thinking', text: 'the reasoning' },
+      { type: 'text', text: 'calling now' },
+      { type: 'tool_req', req_id: 'r1', tool: 'shell_exec', params: { command: 'ls' } },
+    ],
+  };
+
+  const wire = formatMessages([turn], FAKE_THINKING_ADAPTER);
+  assert.equal(wire.length, 1);
+  const parsed = parseMessage(wire[0] as unknown as OpenAI.ChatCompletionMessage);
+  assert.equal(parsed.length, 1);
+  const input = parsed[0] as AgentInput;
+  // Wire fields carry fixed slots (content, reasoning_content, tool_calls),
+  // so parse rebuilds text-then-thinking regardless of original block order
+  // — the grouping (one turn, all three kinds) is what survives, losslessly.
+  assert.deepEqual(input.blocks.map(b => b.type), ['text', 'thinking', 'tool_req']);
+  assert.ok(input.blocks.some(b => b.type === 'thinking' && b.text === 'the reasoning'));
+  assert.ok(input.blocks.some(b => b.type === 'text' && b.text === 'calling now'));
+  const req = input.blocks.find(b => b.type === 'tool_req') as { req_id: string; params: { command: string } };
+  assert.equal(req.req_id, 'r1');
+  assert.equal(req.params.command, 'ls');
+
+  // Prosthetic-rule audit (Log #3451): mediation must be verifiable IN its
+  // mediation. Replay stability — a re-format of the grown history is
+  // deep-equal to the first — makes a silently no-oping adapter visible as
+  // a test failure, not as the return of tool-shedding dressed as
+  // degradation. (Adapted from PR #50's 6e794c7, whose inbound half
+  // asserted the split parse this redesign eliminates.)
+  const history: Message[] = [
+    { role: 'user', type: 'input', blocks: [{ type: 'text', text: 'hello' }] },
+    turn,
+    {
+      role: 'user',
+      type: 'tool_res',
+      results: [{ req_id: 'r1', tool: 'shell_exec', blocks: [{ type: 'text', text: 'done' }] }],
+    },
+  ];
+  const first = formatMessages(history, FAKE_THINKING_ADAPTER);
+  const replay = formatMessages(history, FAKE_THINKING_ADAPTER);
+  assert.deepEqual(replay, first, 're-formatting the same history is stable');
+});

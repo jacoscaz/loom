@@ -2,7 +2,6 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 import {
   type AgentInput,
-  type AgentToolRequest,
   type AgentMessage,
 } from "../../../../types/messages.js";
 import { type UnsupportedBlock } from "../../../../types/blocks.js";
@@ -11,9 +10,9 @@ import { findTextualToolCallNames } from "../openai/parsers.js";
 
 /**
  * One Anthropic response maps to ONE canonical turn: a single AgentInput
- * (text/thinking/refusal/unsupported blocks) plus — when the response
- * carries tool_use blocks — one AgentToolRequest. The canonical store
- * models the conversation; provider wire quirks live here, in the
+ * whose blocks preserve the response's grouping — text/thinking/refusal/
+ * unsupported blocks plus one tool_req block per tool_use. The canonical
+ * store models the conversation; provider wire quirks live here, in the
  * adapter.
  *
  * Thinking blocks keep their signature (`anthropic_signature`) so a
@@ -26,11 +25,9 @@ export const parseMessage = (message: Anthropic.Message): AgentMessage[] => {
     type: 'input',
     blocks: [],
   };
-  const tools: AgentToolRequest = {
-    role: 'agent',
-    type: 'tool_req',
-    requests: [],
-  };
+  // Tool requests are blocks WITHIN the turn (see types/messages.ts):
+  // the response's grouping — content and tool_use together — is
+  // preserved end to end.
   for (const block of message.content ?? []) {
     switch (block.type) {
       case 'text':
@@ -49,7 +46,8 @@ export const parseMessage = (message: Anthropic.Message): AgentMessage[] => {
         input.blocks.push({ type: 'thinking_redacted', text: '' });
         break;
       case 'tool_use':
-        tools.requests.push({
+        input.blocks.push({
+          type: 'tool_req',
           req_id: block.id,
           tool: block.name,
           params: block.input as Record<string, unknown>,
@@ -63,10 +61,7 @@ export const parseMessage = (message: Anthropic.Message): AgentMessage[] => {
         break;
     }
   }
-  const parsed: AgentMessage[] = [];
-  if (input.blocks.length > 0) parsed.push(input);
-  if (tools.requests.length > 0) parsed.push(tools);
-  return parsed;
+  return input.blocks.length > 0 ? [input] : [];
 };
 
 const asUnsupported = (label: string, payload: unknown): UnsupportedBlock => {

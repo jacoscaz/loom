@@ -171,6 +171,16 @@ const formatAgentInput = (message: AgentInput, adapter: AnthropicSessionModel): 
         // parsers.ts) replays as loud marked text, never silently.
         content.push({ type: 'text', text: `[unsupported] ${block.text}` });
         break;
+      case 'tool_req':
+        // Native shape: calls ride in the same assistant message as the
+        // reasoning and text that produced them — one turn, one message.
+        content.push({
+          type: 'tool_use',
+          id: block.req_id,
+          name: block.tool,
+          input: block.params,
+        });
+        break;
       default:
         throw new Error(`formatMessages: unsupported block type '${block.type}' — upstream projection leaked a block the formatter cannot represent`);
     }

@@ -3,7 +3,7 @@ import { type DB } from "../database/client.js";
 import { selectSessionById, updateSessionTokens } from "../database/tables/sessions.js";
 import { type ASelectableDBMessage, selectMessagesForActivation, type AInsertableDBMessage, insertMessage, selectMessages } from "../database/tables/messages.js";
 import { type TextBlock } from "../types/blocks.js";
-import { AgentMessage, AgentToolRequest, UserBlock, UserToolResult, type Message, type UserMessage } from "../types/messages.js";
+import { AgentMessage, AgentToolRequest, UserBlock, UserToolResult, type Message, type UserMessage, type ToolRequestBlock } from "../types/messages.js";
 import { type InitContext, WithContext } from "../context.js";
 import { type Logger } from 'pinetto';
 import { ToolCallContext } from "../types/tools.js";
@@ -370,17 +370,27 @@ export class SessionRunner extends WithContext<SessionRunnerEvents> {
       target_session_id: this.#target_session_id,
     };
     for (const msg of res_messages) {
-      if (msg.type === 'tool_req') {
-        const req_created_at = getMonotonicDate();
-        db_res_messages.push({
-          role: 'agent',
-          data: msg,
-          session_id: this.#origin_session_id,
-          created_at: req_created_at,
-          processed_at: req_created_at,
-        });
+      // Tool requests are blocks within the turn (native shape): the
+      // agent row is persisted whole — reasoning, text and calls in one
+      // message — then its requests are executed. The legacy standalone
+      // tool_req message is still tolerated (history rows, old adapters)
+      // and follows the same persistence shape.
+      const requests = msg.type === 'tool_req'
+        ? msg.requests
+        : msg.type === 'input'
+          ? msg.blocks.filter((b): b is ToolRequestBlock => b.type === 'tool_req')
+          : [];
+      const created_at = getMonotonicDate();
+      db_res_messages.push({
+        role: 'agent',
+        data: msg,
+        session_id: this.#origin_session_id,
+        created_at,
+        processed_at: created_at,
+      });
+      if (requests.length > 0) {
         const results: UserToolResult['results'] = [];
-        for (const request of msg.requests) {
+        for (const request of requests) {
           results.push(await this.#callTool(tool_manager, request, tool_use_context));
         }
         const res_created_at = getMonotonicDate();
@@ -390,15 +400,6 @@ export class SessionRunner extends WithContext<SessionRunnerEvents> {
           session_id: this.#origin_session_id,
           created_at: res_created_at,
           processed_at: null,
-        });
-      } else {
-        const created_at = getMonotonicDate();
-        db_res_messages.push({
-          role: 'agent',
-          data: msg,
-          session_id: this.#origin_session_id,
-          created_at,
-          processed_at: created_at,
         });
       }
     }

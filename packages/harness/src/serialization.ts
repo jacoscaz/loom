@@ -131,6 +131,12 @@ const blocksText = (blocks: MessageBlock[], opts: SerializeOptions): string => {
         text = `[voice block: ${block.path}, ${block.duration}s]`;
         break;
 
+      case 'tool_req':
+        // Tool requests inside a turn render like their legacy message
+        // form — same vocabulary, same visibility.
+        text = `${block.tool}: ${paramsText(block.params, opts)}`;
+        break;
+
       default:
         // Unknown block types render loudly with their full shape — the
         // structural counterpart of the projector's pass-through default.
