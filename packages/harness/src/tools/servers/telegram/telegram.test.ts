@@ -81,6 +81,67 @@ test('processUpdateWithRetry: permanently poisoned update dead-letters after max
   assert.strictEqual(calls, 3); // bounded, no infinite loop
 });
 
+// ── client: outbound media (multipart sendPhoto / sendDocument) ─────────────
+
+test('sendPhoto posts multipart form with chat_id and caption to /sendPhoto', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const photoPath = join(tmpdir(), `test-photo-${Date.now()}.png`);
+  await writeFile(photoPath, Buffer.from([0x89, 0x50, 0x4e, 0x47])); // PNG magic
+
+  let captured: { url: string; body: FormData } | null = null;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: any, init: any) => {
+    captured = { url: String(url), body: init.body as FormData };
+    return apiJson({ message_id: 42 });
+  }) as any;
+  try {
+    const client = new TelegramClient('TESTTOKEN');
+    const message = await client.sendPhoto(123, photoPath, 'a caption');
+    assert.strictEqual(message.message_id, 42);
+    const form = captured!.body;
+    assert.ok(captured!.url.includes('/sendPhoto'));
+    assert.strictEqual(form.get('chat_id'), '123');
+    assert.strictEqual(form.get('caption'), 'a caption');
+    const file = form.get('photo') as File;
+    assert.ok(file instanceof File);
+    assert.strictEqual(file.name, photoPath.split('/').pop());
+    assert.strictEqual(file.type, 'image/png');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('sendDocument posts multipart form to /sendDocument with fallback mime', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const docPath = join(tmpdir(), `test-doc-${Date.now()}`);
+  await writeFile(docPath, Buffer.from('arbitrary bytes'));
+
+  let captured: { url: string; body: FormData } | null = null;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: any, init: any) => {
+    captured = { url: String(url), body: init.body as FormData };
+    return apiJson({ message_id: 43 });
+  }) as any;
+  try {
+    const client = new TelegramClient('TESTTOKEN');
+    const message = await client.sendDocument(456, docPath);
+    assert.strictEqual(message.message_id, 43);
+    const form = captured!.body;
+    assert.ok(captured!.url.includes('/sendDocument'));
+    assert.strictEqual(form.get('chat_id'), '456');
+    assert.strictEqual(form.get('caption'), null);
+    const file = form.get('document') as File;
+    assert.ok(file instanceof File);
+    assert.strictEqual(file.type, 'application/octet-stream');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 const fakeLogger = () => ({
   error: () => {},
   warn: () => {},

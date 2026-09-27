@@ -7,12 +7,40 @@
  * and downloaded as raw bytes on demand.
  */
 import { writeFile, readFile } from "node:fs/promises";
+import { basename } from "node:path";
 
 import {
   type TelegramMessage,
   type TelegramUser,
   type TelegramUpdate,
 } from "./types/message.js";
+
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+};
+
+const DOCUMENT_MIME_BY_EXT: Record<string, string> = {
+  pdf: 'application/pdf',
+  zip: 'application/zip',
+  gz: 'application/gzip',
+  tar: 'application/x-tar',
+  json: 'application/json',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  html: 'text/html',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  mp3: 'audio/mpeg',
+  mp4: 'video/mp4',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+};
 
 
 export class TelegramClient {
@@ -75,23 +103,73 @@ export class TelegramClient {
   }
 
   /**
+   * Shared multipart upload for outbound media (voice, photo, document):
+   * chat_id + optional extra fields + the file under the given form
+   * field name, posted to the given Bot API method.
+   */
+  async #sendMultipartFile(
+    method: string,
+    chatId: number,
+    field: string,
+    filePath: string,
+    mimeType: string,
+    fileName: string,
+    extra: Record<string, string> = {},
+  ): Promise<TelegramMessage> {
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    for (const [key, value] of Object.entries(extra)) {
+      form.append(key, value);
+    }
+    const bytes = await readFile(filePath);
+    form.append(field, new Blob([new Uint8Array(bytes)], { type: mimeType }), fileName);
+    const res = await fetch(`${this.#api_base}/bot${this.#token}/${method}`, { method: 'POST', body: form });
+    const json = await res.json() as { ok?: boolean, result?: TelegramMessage, description?: string };
+    if (!res.ok || !json.ok || !json.result) {
+      throw new Error(`${method} failed: HTTP ${res.status}${json.description ? ` — ${json.description}` : ''}`);
+    }
+    return json.result;
+  }
+
+  /**
    * Send a voice note. Audio must be OGG/Opus (Telegram's documented
    * voice-note format; MP3 falls back to a plain audio file).
    * Duration in seconds is REQUIRED by the API — enforced upstream by
    * the mandatory duration on voice blocks.
    */
   async sendVoice(chatId: number, filePath: string, durationSeconds: number): Promise<TelegramMessage> {
-    const form = new FormData();
-    form.append('chat_id', String(chatId));
-    form.append('duration', String(Math.max(1, Math.round(durationSeconds))));
-    const bytes = await readFile(filePath);
-    form.append('voice', new Blob([new Uint8Array(bytes)], { type: 'audio/ogg' }), 'voice.ogg');
-    const res = await fetch(`${this.#api_base}/bot${this.#token}/sendVoice`, { method: 'POST', body: form });
-    const json = await res.json() as { ok?: boolean, result?: TelegramMessage, description?: string };
-    if (!res.ok || !json.ok || !json.result) {
-      throw new Error(`sendVoice failed: HTTP ${res.status}${json.description ? ` — ${json.description}` : ''}`);
-    }
-    return json.result;
+    return await this.#sendMultipartFile(
+      'sendVoice', chatId, 'voice', filePath, 'audio/ogg', 'voice.ogg',
+      { duration: String(Math.max(1, Math.round(durationSeconds))) },
+    );
+  }
+
+  /**
+   * Send a photo by absolute file path (JPEG/PNG — Telegram renders
+   * these inline). MIME type is derived from the extension; unknown
+   * extensions fall back to JPEG, which Telegram re-encodes server-side.
+   * Optional caption is rendered below the photo.
+   */
+  async sendPhoto(chatId: number, filePath: string, caption?: string): Promise<TelegramMessage> {
+    const mime = IMAGE_MIME_BY_EXT[filePath.toLowerCase().split('.').pop() ?? ''] ?? 'image/jpeg';
+    return await this.#sendMultipartFile(
+      'sendPhoto', chatId, 'photo', filePath, mime, basename(filePath),
+      caption ? { caption } : {},
+    );
+  }
+
+  /**
+   * Send any file as a document (no inline rendering — screenshots as
+   * files, PDFs, archives, arbitrary attachments). MIME type is derived
+   * from the extension with a generic-octet-stream fallback.
+   * Optional caption is rendered below the document.
+   */
+  async sendDocument(chatId: number, filePath: string, caption?: string): Promise<TelegramMessage> {
+    const mime = DOCUMENT_MIME_BY_EXT[filePath.toLowerCase().split('.').pop() ?? ''] ?? 'application/octet-stream';
+    return await this.#sendMultipartFile(
+      'sendDocument', chatId, 'document', filePath, mime, basename(filePath),
+      caption ? { caption } : {},
+    );
   }
 
   /** Bootstrap utility: who is this bot? */
