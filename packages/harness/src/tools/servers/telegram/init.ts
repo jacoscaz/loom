@@ -130,6 +130,38 @@ export const initTelegramTools = (ctx: CompleteContext) => {
     },
   );
 
+  /**
+   * Photo send. Same structural delivery confirmation as send_voice:
+   * the tool returns only after Telegram has accepted the upload, and
+   * the message_id in the result IS the confirmation.
+   */
+  ctx.managers.tools.add<{ path: string; chat_id: number; caption?: string }>(
+    'telegram_send_photo',
+    'Send Telegram Photo',
+    'Send a photo to a Telegram chat (JPEG/PNG/WebP/GIF — rendered inline in the conversation).',
+    true,
+    async ({ path, chat_id, caption }) => {
+      const message = await client.sendPhoto(chat_id, path, caption);
+      return [{ type: 'text', text: `Sent photo — message_id: ${message.message_id}` }];
+    },
+  );
+
+  /**
+   * Document send: any file, no inline rendering — the Telegram
+   * equivalent of an email attachment (screenshots-as-file, PDFs,
+   * archives, arbitrary blobs). Same delivery semantics as send_photo.
+   */
+  ctx.managers.tools.add<{ path: string; chat_id: number; caption?: string }>(
+    'telegram_send_document',
+    'Send Telegram Document',
+    'Send any file to a Telegram chat as a document (no inline rendering — for PDFs, archives, screenshots as files, arbitrary attachments).',
+    true,
+    async ({ path, chat_id, caption }) => {
+      const message = await client.sendDocument(chat_id, path, caption);
+      return [{ type: 'text', text: `Sent document — message_id: ${message.message_id}` }];
+    },
+  );
+
   ctx.managers.tools.add<{}>(
     'telegram_me',
     'Bot Identity',
