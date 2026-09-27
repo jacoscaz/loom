@@ -44,6 +44,19 @@ export const insertMessage = async (db: DB, message: AInsertableDBMessage | AIns
   return result;
 };
 
+/**
+ * Rewrite a message's data in place (row identity — id, created_at,
+ * processed_at — preserved). The compactor's media-drop path is the
+ * current caller: flattening media blocks in retained rows is a data
+ * rewrite, not a delete + reinsert.
+ */
+export const updateMessageData = async (db: DB, id: number, data: Message): Promise<void> => {
+  await db.updateTable('messages')
+    .set({ data })
+    .where('id', '=', id)
+    .execute();
+};
+
 export interface ADBSelectMessagesOpts {
   session_id: number;
   unprocessed?: 'include' | 'exclude';

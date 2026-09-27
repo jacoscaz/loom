@@ -1,15 +1,99 @@
-
 import { type Logger } from "pinetto";
 import { type InitContext, WithContext } from "../context.js";
 import { type DB, ensureTrx } from "../database/client.js";
-import { selectMessages, insertMessage, type ASelectableDBMessage } from "../database/tables/messages.js";
+import { selectMessages, insertMessage, updateMessageData, type ASelectableDBMessage } from "../database/tables/messages.js";
 import { updateSessionSystemPrompt } from "../database/tables/sessions.js";
 import { softPurgeSessionInjections } from "../database/tables/session_injections.js";
 import { makeCompactionPrompt } from "../prompts/compaction.js";
-import { type AgentBlock } from "../types/messages.js";
-import { type TextBlock } from "../types/blocks.js";
+import { type AgentBlock, type Message } from "../types/messages.js";
+import { type MessageBlock, type TextBlock } from "../types/blocks.js";
 import { PROJECT_COMPACTION_OPTS, projectMessages } from "../projection.js";
 import { SERIALIZE_COMPACTION_OPTS, serializeMessages } from "../serialization.js";
+
+export interface CompactOpts {
+  /** Number of recent messages to keep verbatim (default 20). */
+  retain_count?: number;
+  /**
+   * Flatten media blocks in the retained messages to text markers
+   * (default false). See dropMedia().
+   */
+  drop_media?: boolean;
+}
+
+/**
+ * Media drop (opt-in compaction policy): the retained tail is the only
+ * place media bytes survive a compaction — the to-summarize rows are
+ * deleted wholesale and the summary is text. Left in place, each block's
+ * base64 rides every future prompt until a later compaction eventually
+ * deletes it. Every dropped block becomes a text marker that declares
+ * the loss and keeps the content that IS text (caption, transcription),
+ * mirroring projection's convention: visible, labelled loss over silent
+ * loss. Returns the input message UNCHANGED (same reference) when it
+ * carries no media — the compactor uses that identity to rewrite only
+ * the rows that actually differ.
+ */
+export const dropMedia = (message: Message): Message => {
+  switch (message.type) {
+    case 'notification': {
+      const blocks = flattenBlocks(message.blocks);
+      return blocks === message.blocks ? message : { ...message, blocks };
+    }
+    case 'input':
+      // Narrow by role so each branch's block family matches its
+      // message type — same pattern (and same reason) as projection's
+      // projectMessage: a merged spread would force one family across
+      // the UserInput | AgentInput union.
+      if (message.role === 'agent') {
+        const blocks = flattenBlocks(message.blocks);
+        return blocks === message.blocks ? message : { ...message, blocks };
+      } else {
+        const blocks = flattenBlocks(message.blocks);
+        return blocks === message.blocks ? message : { ...message, blocks };
+      }
+    case 'tool_res': {
+      let changed = false;
+      const results = message.results.map((result) => {
+        const blocks = flattenBlocks(result.blocks);
+        if (blocks !== result.blocks) changed = true;
+        return blocks === result.blocks ? result : { ...result, blocks };
+      });
+      return changed ? { ...message, results } : message;
+    }
+    case 'tool_req':
+      // Legacy request rows carry no media family (params are opaque
+      // JSON) — nothing to drop.
+      return message;
+  }
+};
+
+/**
+ * Block-level media flattening. Outputs stay within the input block
+ * family's space: pass-through keeps the original block, and every
+ * replacement is a TextBlock (a member of both UserBlock and
+ * AgentBlock). The cast below bridges only the generic parameter, not
+ * the type space — same pattern as projection's projectBlocks.
+ */
+const flattenBlocks = <B extends MessageBlock>(blocks: readonly B[]): B[] => {
+  let changed = false;
+  const flat = blocks.map((block): B => {
+    switch (block.type) {
+      case 'image': {
+        changed = true;
+        const caption = block.caption ? ` ${block.caption}` : '';
+        return { type: 'text', text: `[image dropped at compaction: ${block.mimeType}]${caption}` } as B;
+      }
+      case 'voice': {
+        changed = true;
+        return (block.transcription
+          ? { type: 'text', text: `[voice note transcript, ${block.duration}s, audio dropped at compaction]: ${block.transcription}` }
+          : { type: 'text', text: `[voice note dropped at compaction: ${block.path}, ${block.duration}s]` }) as B;
+      }
+      default:
+        return block;
+    }
+  });
+  return changed ? flat : (blocks as B[]);
+};
 
 /**
  * Tiered compaction: summarizes older messages via a dedicated model
@@ -19,8 +103,9 @@ import { SERIALIZE_COMPACTION_OPTS, serializeMessages } from "../serialization.j
  * Procedure:
  * 1. Select all processed messages for the session
  * 2. Split: messages before the last N get summarized; last N retained
- * 3. Feed to-summarize messages to the compactor model
- * 4. Delete summarized messages, insert the summary, keep retained messages
+ * 3. (opt-in, drop_media) flatten retained media blocks to text markers
+ * 4. Feed to-summarize messages to the compactor model
+ * 5. Delete summarized messages, insert the summary, keep retained messages
  */
 export class Compactor extends WithContext {
 
@@ -35,10 +120,12 @@ export class Compactor extends WithContext {
    * Compact a session: summarize older messages, retain recent ones.
    *
    * @param session_id  The session to compact
-   * @param retain_count  Number of recent messages to keep verbatim
+   * @param opts  retain_count: recent messages to keep verbatim;
+   *              drop_media: flatten retained media blocks to text markers
    * @param db  Database connection (may be a transaction)
    */
-  async compact(session_id: number, retain_count: number = 20, db?: DB): Promise<void> {
+  async compact(session_id: number, opts: CompactOpts = {}, db?: DB): Promise<void> {
+    const retain_count = opts.retain_count ?? 20;
     await ensureTrx(db ?? this._ctx.db, async (trx) => {
       // Select all processed messages
       const raw_messages = (await selectMessages(trx, {
@@ -84,6 +171,22 @@ export class Compactor extends WithContext {
 
       this.#logger.info('compacting session %d: %d messages to summarize, %d to retain',
         session_id, to_summarize.length, to_retain.length);
+
+      // Media drop (opt-in): the retained tail is the only place media
+      // bytes survive compaction — flatten to text markers NOW, while the
+      // history is being rewritten anyway. Rows untouched by the drop
+      // keep their data (and their reference) as-is.
+      if (opts.drop_media) {
+        let dropped = 0;
+        for (const row of to_retain) {
+          const flat = dropMedia(row.data);
+          if (flat !== row.data) {
+            await updateMessageData(trx, row.id, flat);
+            dropped += 1;
+          }
+        }
+        this.#logger.info('media drop: flattened media in %d retained messages', dropped);
+      }
 
       // Build conversation text for the compactor model
       const projected_messages = projectMessages(to_summarize.map(m => m.data), PROJECT_COMPACTION_OPTS);

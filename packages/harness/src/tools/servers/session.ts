@@ -10,13 +10,13 @@ const text = (s: string): TextBlock[] => [{ type: 'text', text: s }];
 
 export const initSessionTools = (ctx: CompleteContext) => {
 
-  ctx.managers.tools.add<{ retain_count?: number }>(
+  ctx.managers.tools.add<{ retain_count?: number; drop_media?: boolean }>(
     'session_compact',
     'Compact',
-    'Compact the session by summarizing older messages and retaining recent ones. Uses a dedicated compactor model.',
+    'Compact the session by summarizing older messages and retaining recent ones. Uses a dedicated compactor model. Set drop_media: true to replace retained messages\' media blocks with text markers (captions/transcriptions kept as text) — bounds post-compaction prompt cost.',
     true,
-    async ({ retain_count }, call_ctx) => {
-      await ctx.compactor.compact(call_ctx.origin_session_id, retain_count ?? 20, call_ctx.db);
+    async ({ retain_count, drop_media }, call_ctx) => {
+      await ctx.compactor.compact(call_ctx.origin_session_id, { retain_count, drop_media }, call_ctx.db);
       return text('Compaction successful.');
     },
   );
