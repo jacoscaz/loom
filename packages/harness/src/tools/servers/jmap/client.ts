@@ -3,6 +3,7 @@
 
 export interface JMAPSession {
   apiUrl: string;
+  uploadUrl?: string;
   accounts: Record<string, {
     name: string;
     isPersonal: boolean;
@@ -49,7 +50,30 @@ export interface SendEmailParams {
   cc?: string[];
   subject: string;
   body: string;
+  /** Absolute paths of files to attach. Uploaded as JMAP blobs, sent with disposition: 'attachment'. */
+  attachments?: Array<{ path: string; filename?: string }>;
 }
+
+const ATTACHMENT_MIME_BY_EXT: Record<string, string> = {
+  pdf: 'application/pdf',
+  zip: 'application/zip',
+  gz: 'application/gzip',
+  tar: 'application/x-tar',
+  json: 'application/json',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  html: 'text/html',
+  md: 'text/markdown',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  mp3: 'audio/mpeg',
+  mp4: 'video/mp4',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+};
 
 export interface SendEmailResult {
   emailId: string;
@@ -241,6 +265,30 @@ export class JMAPClient {
     return result.list[0];
   }
 
+  /**
+   * Upload a file as a JMAP blob (RFC 8620 §6.1): POST raw bytes to the
+   * session's uploadUrl with the {accountId} placeholder substituted.
+   * Returns the blobId to reference in Email/set creates.
+   */
+  async uploadBlob(accountId: string, filePath: string): Promise<{ blobId: string; size: number; type: string }> {
+    const session = await this.#getSession();
+    if (!session.uploadUrl) {
+      throw new Error('JMAP session exposes no uploadUrl — cannot upload attachments');
+    }
+    const { readFile } = await import('node:fs/promises');
+    const bytes = await readFile(filePath);
+    const type = ATTACHMENT_MIME_BY_EXT[filePath.toLowerCase().split('.').pop() ?? ''] ?? 'application/octet-stream';
+    const res = await fetch(session.uploadUrl.replace('{accountId}', accountId), {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${this.#token}`, 'Content-Type': type },
+      body: new Uint8Array(bytes),
+    });
+    if (!res.ok) {
+      throw new Error(`JMAP blob upload failed: HTTP ${res.status}`);
+    }
+    return await res.json() as { blobId: string; size: number; type: string };
+  }
+
   async sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
     const accountId = await this.getAccountId();
     const identity = await this.getIdentity();
@@ -259,6 +307,29 @@ export class JMAPClient {
     // recipients from actual delivery.
     const envelopeRecipients = [...params.to, ...(params.cc ?? [])].map(email => ({ email }));
 
+    // Upload attachment blobs BEFORE the create/submit request — blobs must
+    // exist to be referenced. Name: explicit filename or the basename.
+    // Fastmail quirk (live-probed 2026-09-27): the top-level `attachments`
+    // Email property is REJECTED on create (invalidProperties); attachments
+    // must ride inside the bodyStructure as multipart/mixed subParts.
+    let attachmentParts: Array<Record<string, unknown>> | null = null;
+    if (params.attachments && params.attachments.length > 0) {
+      const { basename } = await import('node:path');
+      attachmentParts = [];
+      for (const att of params.attachments) {
+        const blob = await this.uploadBlob(accountId, att.path);
+        attachmentParts.push({
+          blobId: blob.blobId,
+          type: blob.type,
+          name: att.filename ?? basename(att.path),
+          disposition: 'attachment',
+        });
+      }
+    }
+    const bodyStructure: Record<string, unknown> = attachmentParts
+      ? { type: 'multipart/mixed', subParts: [{ partId: 'body', type: 'text/plain' }, ...attachmentParts] }
+      : { partId: 'body', type: 'text/plain' };
+
     const createKey = 'draft';
     const responses = await this.jmapRequest([
       ['Email/set', {
@@ -270,7 +341,7 @@ export class JMAPClient {
             from: fromAddr,
             to: toAddrs,
             ...(ccAddrs.length > 0 ? { cc: ccAddrs } : {}),
-            bodyStructure: { partId: 'body', type: 'text/plain' },
+            bodyStructure,
             bodyValues: {
               body: { value: params.body, charset: 'utf-8' },
             },
@@ -298,9 +369,10 @@ export class JMAPClient {
     if (emailResult.notCreated || sendResult.notCreated) {
       if (sendResult.notCreated) {
         const err = Object.values(sendResult.notCreated)[0];
-        throw new Error(`Send failed: ${err.type} — ${err.description}`);
+        throw new Error(`Send failed: ${err.type} — ${err.description ?? JSON.stringify(err)}`);
       }
       if (emailResult.notCreated) {
+        // include the offending properties — Fastmail names them there
         throw new Error(`Email creation failed: ${JSON.stringify(emailResult.notCreated)}`);
       }
     }
