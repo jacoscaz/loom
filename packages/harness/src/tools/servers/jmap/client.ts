@@ -69,6 +69,7 @@ export class JMAPClient {
   #cachedSession: JMAPSession | null = null;
   #cachedInboxId: string | null = null;
   #cachedDraftsId: string | null = null;
+  #cachedSentId: string | null = null;
   #cachedIdentity: Identity | null = null;
 
   constructor(opts: { apiUrl: string; sessionUrl: string; token: string }) {
@@ -156,6 +157,15 @@ export class JMAPClient {
     if (!drafts) throw new Error('No drafts mailbox found');
     this.#cachedDraftsId = drafts.id;
     return drafts.id;
+  }
+
+  async getSentMailboxId(): Promise<string> {
+    if (this.#cachedSentId) return this.#cachedSentId;
+    const mailboxes = await this.#getMailboxes();
+    const sent = mailboxes.find(m => m.role === 'sent');
+    if (!sent) throw new Error('No sent mailbox found');
+    this.#cachedSentId = sent.id;
+    return sent.id;
   }
 
   async getIdentity(): Promise<Identity> {
@@ -280,24 +290,10 @@ export class JMAPClient {
           },
         },
       }, '1'],
-      // Fastmail rejects onSuccessDestroyEmail / onSuccessUpdateEmail /
-      // undoStatus as CREATE properties on EmailSubmission (invalidProperties,
-      // live-probed 2026-09-04), so the submitted draft is filed out of the
-      // Drafts mailbox in a follow-up method call in the same JMAP request.
-      // (The Sent copy is managed by the server's submission handling.)
-      ['Email/set', {
-        accountId,
-        update: {
-          [`#${createKey}`]: {
-            [`mailboxIds/${draftMailboxId}`]: null,
-          },
-        },
-      }, '2'],
     ], USING_SUBMISSION);
 
     const emailResult = (responses[0] as unknown[])[1] as { created: Record<string, { id: string }> | null; notCreated: Record<string, unknown> | null };
     const sendResult = (responses[1] as unknown[])[1] as { created: Record<string, { id: string; sendAt: string; undoStatus: string }> | null; notCreated: Record<string, { type: string; description: string }> | null };
-    const fileResult = (responses[2] as unknown[])[1] as { updated: Record<string, Record<string, unknown>> | null; notUpdated: Record<string, { type: string; description?: string }> | null } | undefined;
 
     if (emailResult.notCreated || sendResult.notCreated) {
       if (sendResult.notCreated) {
@@ -309,14 +305,38 @@ export class JMAPClient {
       }
     }
 
-    // Filing the submitted draft out of Drafts is cosmetic — a failure here
-    // must not fail the send (the mail is already out). Warn and continue.
-    if (fileResult && fileResult.notUpdated) {
-      console.warn('[jmap] could not file submitted draft out of Drafts:', JSON.stringify(fileResult.notUpdated));
-    }
-
     const emailId = emailResult.created![createKey].id;
     const sendInfo = sendResult.created!['send'];
+
+    // File the submitted draft into Sent in a SECOND request, using the
+    // real email id: Fastmail does not resolve creation back-references
+    // (`#key`) in Email/set update keys — notFound every time (live-probed
+    // 2026-09-27; onSuccessUpdateEmail as a submission create property was
+    // likewise rejected, live-probed 2026-09-04). Without this, every sent
+    // email stays in Drafts forever. Filing is cosmetic — a failure here
+    // must not fail the send (the mail is already out). Warn and continue.
+    try {
+      const sentMailboxId = await this.getSentMailboxId();
+      const fileResponses = await this.jmapRequest([
+        ['Email/set', {
+          accountId,
+          update: {
+            [emailId]: {
+              [`mailboxIds/${draftMailboxId}`]: null,
+              [`mailboxIds/${sentMailboxId}`]: true,
+              'keywords/$draft': null,
+              'keywords/$seen': true,
+            },
+          },
+        }, '0'],
+      ], USING_MAIL);
+      const fileResult = (fileResponses[0] as unknown[])[1] as { updated: Record<string, unknown> | null; notUpdated: Record<string, { type: string; description?: string }> | null };
+      if (fileResult.notUpdated && Object.keys(fileResult.notUpdated).length > 0) {
+        console.warn('[jmap] could not file submitted email into Sent:', JSON.stringify(fileResult.notUpdated));
+      }
+    } catch (fileError) {
+      console.warn('[jmap] could not file submitted email into Sent:', fileError);
+    }
 
     return { emailId, submissionId: sendInfo.id, sendAt: sendInfo.sendAt };
   }
