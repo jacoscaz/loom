@@ -1,18 +1,7 @@
-# Example configuration for loom.
+# Example configuration file for Loom.
 #
 # String values using the "${VAR}" placeholder syntax will be replaced with
 # the referenced environment variable (from .env or the process environment).
-#
-# Validation: the loader casts the parsed config against the Config type
-# (runtyped) and then diffs the result against the raw parse — any key
-# silently stripped by validation is a boot ERROR naming the exact path.
-# Unknown keys are rejected everywhere EXCEPT the open regions of the type —
-# e.g. a model's options.extras block, where adapter-specific payloads ride
-# by design.
-#
-# Style discipline for session-model entries: dotted keys only. Never use
-# sub-table headers like [models.session.options] — in TOML they attach to
-# the LAST defined [[models.session]] element and misread badly in lists.
 #
 # Structure notes:
 # - The `mail` and `telegram` blocks are OWNED by the @loom/mcp-jmap
