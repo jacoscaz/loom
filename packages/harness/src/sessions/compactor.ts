@@ -6,7 +6,7 @@ import { selectMessages, insertMessage, type ASelectableDBMessage } from "../dat
 import { updateSessionSystemPrompt } from "../database/tables/sessions.js";
 import { softPurgeSessionInjections } from "../database/tables/session_injections.js";
 import { makeCompactionPrompt } from "../prompts/compaction.js";
-import { type AgentBlock } from "../types/messages.js";
+import { type AgentBlock, type Message, type UserBlock } from "../types/messages.js";
 import { type TextBlock } from "../types/blocks.js";
 import { PROJECT_COMPACTION_OPTS, projectMessages } from "../projection.js";
 import { SERIALIZE_COMPACTION_OPTS, serializeMessages } from "../serialization.js";
@@ -22,6 +22,73 @@ import { SERIALIZE_COMPACTION_OPTS, serializeMessages } from "../serialization.j
  * 3. Feed to-summarize messages to the compactor model
  * 4. Delete summarized messages, insert the summary, keep retained messages
  */
+export interface CompactOpts {
+  /** Replace media blocks in the retained tail with text markers. */
+  drop_media?: boolean;
+}
+
+/**
+ * Replace media blocks (image, voice) in a message with labelled text
+ * markers. Captions and voice transcriptions survive as text; binary
+ * payloads (base64 buffers, file references) do not. The loss is
+ * visible, never silent — markers say what was dropped and why.
+ *
+ * Media rides only user-role content: UserInput, UserNotification and
+ * UserToolResult blocks. Agent turns are text/thinking/tool requests
+ * by construction and pass through untouched.
+ *
+ * Returns the same reference when nothing changed, so callers can
+ * skip untouched rows.
+ */
+export const dropMedia = (data: Message): Message => {
+  const mapBlocks = (blocks: UserBlock[]): UserBlock[] => {
+    let changed = false;
+    const mapped = blocks.map((block): UserBlock => {
+      if (block.type === 'image') {
+        changed = true;
+        const text = block.caption
+          ? `[image dropped by compaction: ${block.mimeType}] ${block.caption}`
+          : `[image dropped by compaction: ${block.mimeType}]`;
+        return { type: 'text', text };
+      }
+      if (block.type === 'voice') {
+        changed = true;
+        const base = `[voice note dropped by compaction: ${block.path}, ${block.duration}s]`;
+        const text = block.transcription
+          ? `${base} transcription: ${block.transcription}`
+          : base;
+        return { type: 'text', text };
+      }
+      return block;
+    });
+    return changed ? mapped : blocks;
+  };
+
+  switch (data.type) {
+    case 'input': {
+      if (data.role !== 'user') return data;
+      const blocks = mapBlocks(data.blocks);
+      return blocks === data.blocks ? data : { ...data, blocks };
+    }
+    case 'notification': {
+      const blocks = mapBlocks(data.blocks);
+      return blocks === data.blocks ? data : { ...data, blocks };
+    }
+    case 'tool_res': {
+      let changed = false;
+      const results = data.results.map((result) => {
+        const blocks = mapBlocks(result.blocks);
+        if (blocks === result.blocks) return result;
+        changed = true;
+        return { ...result, blocks };
+      });
+      return changed ? { ...data, results } : data;
+    }
+    default:
+      return data;
+  }
+};
+
 export class Compactor extends WithContext {
 
   #logger: Logger;
@@ -36,9 +103,10 @@ export class Compactor extends WithContext {
    *
    * @param session_id  The session to compact
    * @param retain_count  Number of recent messages to keep verbatim
+   * @param opts  Compaction options (see CompactOpts)
    * @param db  Database connection (may be a transaction)
    */
-  async compact(session_id: number, retain_count: number = 20, db?: DB): Promise<void> {
+  async compact(session_id: number, retain_count: number = 20, opts: CompactOpts = {}, db?: DB): Promise<void> {
     await ensureTrx(db ?? this._ctx.db, async (trx) => {
       // Select all processed messages
       const raw_messages = (await selectMessages(trx, {
@@ -84,6 +152,22 @@ export class Compactor extends WithContext {
 
       this.#logger.info('compacting session %d: %d messages to summarize, %d to retain',
         session_id, to_summarize.length, to_retain.length);
+
+      // drop_media: the retained tail is the only place media bytes
+      // survive compaction — the summarized region is deleted wholesale.
+      // Flatten surviving media to labelled text markers so the tail
+      // stops re-paying their token cost on every activation.
+      if (opts.drop_media) {
+        for (const m of to_retain) {
+          const dropped = dropMedia(m.data);
+          if (dropped !== m.data) {
+            await trx.updateTable('messages')
+              .set({ data: dropped })
+              .where('id', '=', m.id)
+              .execute();
+          }
+        }
+      }
 
       // Build conversation text for the compactor model
       const projected_messages = projectMessages(to_summarize.map(m => m.data), PROJECT_COMPACTION_OPTS);
