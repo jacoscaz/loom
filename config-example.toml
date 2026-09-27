@@ -3,15 +3,12 @@
 # String values using the "${VAR}" placeholder syntax will be replaced with
 # the referenced environment variable (from .env or the process environment).
 
-tz = "${TZ}"
+# =============================================================================
+#                               GENERAL OPTIONS
+# =============================================================================
 
-[logging]
-# "trace" | "debug" | "info" | "warn" | "error"
-level = "info"
-# Optional. Directory for the monologue log — the human-facing
-# mirror of the session stream — and its rotated files.
-# Defaults to /var/log/loom.
-# monologue_dir = "/var/log/loom"
+# Timezone for the application. IANA time zone name (e.g. "Europe/London").
+tz = "${TZ}"
 
 # Optional. Pid file backing the single-instance guard: the first thing
 # the harness does at boot is check this file. A second instance finding
@@ -22,29 +19,63 @@ level = "info"
 # Defaults to harness.pid at the level of the harness package.json.
 # pid_file = "/root/loom/packages/harness/harness.pid"
 
-# JMAP mail access (owned by @loom/mcp-jmap). Inbound mail from
-# allowlisted senders arrives as `mail/arrived` events that activate
-# the agent.
+# =============================================================================
+#                                  LOGGING
+# =============================================================================
+
+[logging]
+
+# Logging level.
+# Supported values: "trace", "debug", "info", "warn", "error"
+level = "info"
+
+# Whether to prefix log messages with a (date)timestamp. Boolean. Optional.
+datetime = false;
+
+# Optional. Directory for the monologue log — the human-facing
+# mirror of the session stream — and its rotated files.
+# Defaults to /var/log/loom.
+monologue_dir = "/var/log/loom"
+
+# =============================================================================
+#                                 EMAIL / JMAP
+# =============================================================================
+
 [mail]
+
 # JMAP API endpoint for mail operations.
 api_url = 'https://api.fastmail.com/jmap/api'
+
 # JMAP session discovery URL.
 session_url = 'https://api.fastmail.com/jmap/session'
+
 # API token for authentication. Generate in your provider's settings.
 api_token = "${JMAP_API_TOKEN}"
+
 # How often to poll for new mail, in milliseconds.
 poll_interval_ms = 120000
 
-# Telegram Bot API integration (owned by @loom/mcp-telegram).
-# Inbound messages from allowlisted users arrive as `telegram/message`
-# events that activate the agent. A bot token is obtained from @BotFather.
+# =============================================================================
+#                                 TELEGRAM
+# =============================================================================
+
 [telegram]
+
+# Telegram Bot API integration.
+
+# A bot token is obtained from @BotFather.
 api_token = "${TELEGRAM_API_TOKEN}"
+
 # Long-poll interval in seconds for getUpdates (Telegram timeout).
 poll_timeout_seconds = 30
+
 # Optional. Directory where downloaded media (photos) are stored.
 # Defaults to <cwd>/media/telegram.
 # media_dir = "/var/lib/loom/media/telegram"
+
+# =============================================================================
+#                                 HEARTBEAT
+# =============================================================================
 
 # Heartbeat: keeps the agent present between prompts. The harness ticks
 # on `interval`; a heartbeat-driven activation fires only if at least
@@ -52,32 +83,49 @@ poll_timeout_seconds = 30
 # the effective rhythm is "N time of quiet", not N of clock time.
 # `quiet_after_ms` suppresses synthetic activations right after ANY
 # activation, keeping heartbeats out of the middle of ongoing work.
+
 [heartbeat]
+
+# Heartbeat interval in milliseconds.
 interval = 30000 # cheap internal poll cadence (ms)
+
 # Minimum quiet time before a heartbeat-driven activation fires.
 # 2 hours is a reasonable starting presence rhythm.
 activation_interval_ms = 7200000
+
 quiet_after_ms = 600000
 
+# =============================================================================
+#                                  POSTGRES
+# =============================================================================
+
 [postgres]
+
 port = "${POSTGRES_PORT}"
 hostname = "${POSTGRES_HOSTNAME}"
 database = "${POSTGRES_DATABASE}"
 username = "${POSTGRES_USERNAME}"
 password = "${POSTGRES_PASSWORD}"
 
+# =============================================================================
+#                                  MODELS
+# =============================================================================
+
 [models]
+
+# =============================================================================
+#                               SESSION MODELS
+# =============================================================================
 
 # Session models: generate all agent activations. An ARRAY of tables —
 # the first entry is the default every session starts on; the agent
-# can switch to any other entry at runtime via the session MCP
-# server's switch_substrate tool. Restarts reset to the first
-# entry (switch state is not persisted — documented V1 limitation).
-# Use models optimized for agentic workflows if possible.
+# can switch to any other entry at runtime via the `switch_substrate` tool.
+# Restarts reset to the first entry. Use models optimized for agentic workflows
+# if possible.
+
 
 [[models.session]]
-# Harness-internal unique model id. Reference models by THIS
-# (e.g. in the switch_substrate tool) — never by array position.
+# Harness-internal unique model id.
 id = 'z-ai/glm-5.3-flash'
 # Declarative selection guidance, surfaced in the boot event's
 # available-models menu — helps the agent choose substrates
