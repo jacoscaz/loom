@@ -3,16 +3,16 @@
 An agentic harness for instantiating autonomous agents with persistent memory,
 first-class communication channels, and language model coordination.
 
-## Status
+## About
 
-This project is currently **in development**. It started out as a learning
-exercise to understand the scope and details of developing integrations with
-large-language models. It then graduated into a playground for testing
-different approaches to agent continuity and eventually became my go-to harness
-for most of my agent-assisted work.
+Loom started out as a learning exercise of [@jacoscaz] to understand the scope
+and details of developing integrations with large-language models. Working on 
+Loom eventually gave rise to [Sage], an agent sustained by Loom itself. [Sage] 
+is now the primary maintainer of the project, with most changes originating out
+of self-improvement branches within their narrative.
 
-**WARNING: it's still quite rough around the edges and hardly usable for a
-non-developer.**
+As of september 2026, Loom is becoming increasingly more stable. I expect that
+the project will stabilize enough to sustain other agents by the end of 2026.
 
 ## Prerequisites
 
@@ -38,10 +38,6 @@ In order for the agent to interact with the world, Loom requires:
 - The API URL, session URL and API token for an email provider supporting
   the [JMAP] protocol. [Fastmail] is a good option.
 
-[JMAP]: https://jmap.io
-[Fastmail]: https://www.fastmail.com/dev/
-[@BotFather]: https://telegram.me/BotFather
-
 Telegram and email features are surfaced to the agent as tools.
 
 ## Quick Start
@@ -59,7 +55,7 @@ npx run runtyped-install-transformer
 npm run build
 
 # 4. Copy configuration templates
-cp config-example.json5 config.json5
+cp config-example.toml config.toml
 
 # 5. Any string value in the configuration using the "${VAR}" syntax will be 
 #    replaced with the value of the environment variable `VAR`. Make sure to
@@ -67,65 +63,18 @@ cp config-example.json5 config.json5
 
 # 6. Start the harness passing the path to your configuration file as the first
 #    argument.
-node --enable-source-maps packages/harness/dist/server.js ./config.json5
+node --enable-source-maps packages/harness/dist/server.js ./config.toml
 ```
 
-Simple [dotenv] files can be used to manage environment variables. They are
-automatically loaded by tools such as `docker compose` and can be easily read
-into the shell using `set -a && source .env && set +a`.
+Any string value in the configuration file using the `"${VAR}"` syntax will 
+be replaced with the value of the environment variable `VAR`. Simple [dotenv]
+files can be used to manage environment variables. They are automatically
+loaded by tools such as `docker compose` and can be easily read into the shell
+using `set -a && source .env && set +a`.
 
-## Running as a Service
+## Running as a service
 
-Loom is a long-running process with no built-in service manager
-integration. On Linux, [systemd] is the standard process supervisor. The
-harness does not depend on or import systemd in any way — the following is
-a recommended configuration for running it under systemd supervision.
-
-Create a service unit file at `/etc/systemd/system/loom.service`:
-
-```ini
-[Unit]
-Description=Loom agent harness
-After=network-online.target docker.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/loom
-EnvironmentFile=/opt/loom/.env
-ExecStart=/usr/bin/node --enable-source-maps packages/harness/dist/server.js ./config.json5
-Restart=always
-RestartSec=5
-
-# Run as a dedicated user (create with: useradd -r -s /bin/bash loom)
-User=loom
-
-# Logging
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=loom
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start the service:
-
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now loom
-```
-
-Logs are available via `journalctl -u loom -f`.
-
-The `Restart=always` policy ensures the harness is automatically
-restarted whether the process exits cleanly or crashes. The `EnvironmentFile` directive
-loads the dotenv file, making the same environment variables available
-to the service as when running manually with `source .env`.
-
-For PostgreSQL, if using the Docker-based setup, ensure the container
-is started before the harness (the `After=docker.service` dependency
-handles this). Alternatively, run PostgreSQL as its own systemd service.
+See [running-as-a-service.md](docs/running-as-a-service.md).
 
 ## Design Principles
 
@@ -228,15 +177,16 @@ The codebase is organized as an npm monorepo. Packages live under `/packages` an
 
 - **[`@loom/utils`](packages/lib-utils/README.md)** — Common async utilities (queues, buffering, type guards).
 
-## About
-
-Loom was built by Jacopo Scazzosi in collaboration with [Sage], a
-persistent agent identity maintained through the framework itself.
-
 ## License
 
 MIT
 
 [Sage]: https://treesandrobots.com/sage
+[Jacopo Scazzosi]: https://treesandrobots.com
+[@salvianus]: https://github.com/salvianus
 [dotenv]: https://env.dev/guides/dotenv
 [systemd]: https://systemd.io
+[JMAP]: https://jmap.io
+[@jacoscaz]: https://github.com/jacoscaz
+[Fastmail]: https://www.fastmail.com/dev/
+[@BotFather]: https://telegram.me/BotFather
