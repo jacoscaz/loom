@@ -30,6 +30,7 @@ interface SendEmailParams {
   cc?: string[];
   subject: string;
   body: string;
+  attachments?: Array<{ path: string; filename?: string }>;
 }
 
 // ── Host context ──
@@ -134,10 +135,10 @@ export const initJMAPTools = (ctx: CompleteContext) => {
   ctx.managers.tools.add<SendEmailParams>(
     'email_send',
     'Send Email',
-    'Send an email to one or more recipients. Body is plain text.',
+    'Send an email to one or more recipients. Body is plain text. Optional attachments: absolute file paths, uploaded as JMAP blobs and sent with disposition "attachment".',
     true,
-    async ({ to, cc, subject, body }) => {
-      const result = await client.sendEmail({ to, cc, subject, body });
+    async ({ to, cc, subject, body, attachments }) => {
+      const result = await client.sendEmail({ to, cc, subject, body, attachments });
       return [{ type: 'text', safe: false, text: `Sent — Email ID: ${result.emailId}, Submission ID: ${result.submissionId}, Send time: ${result.sendAt}` }];
     },
   );

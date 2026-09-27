@@ -12,6 +12,8 @@ import { JMAPClient } from './client.js';
 // Drafts → Sent in a SECOND request.
 
 const SESSION = {
+  apiUrl: 'https://jmap.test/api',
+  uploadUrl: 'https://jmap.test/upload/{accountId}',
   primaryAccounts: {
     'urn:ietf:params:jmap:mail': 'acc1',
     'urn:ietf:params:jmap:submission': 'acc1',
@@ -33,6 +35,12 @@ test('sendEmail files the submitted draft into Sent via a second request with th
     const urlStr = String(url);
     if (urlStr.includes('/session')) {
       return new Response(JSON.stringify(SESSION), { headers: { 'content-type': 'application/json' } });
+    }
+    if (urlStr.includes('/upload/')) {
+      assert.ok(urlStr.includes('/upload/acc1'), 'upload URL placeholder substituted');
+      return new Response(JSON.stringify({ blobId: 'BLOB-1', size: 4, type: 'text/plain' }), {
+        headers: { 'content-type': 'application/json' },
+      });
     }
     const body = JSON.parse(init.body);
     apiCalls.push({ using: body.using, methodCalls: body.methodCalls });
@@ -80,6 +88,82 @@ test('sendEmail files the submitted draft into Sent via a second request with th
     assert.strictEqual(update['mailboxIds/M-sent'], true, 'filed into Sent');
     assert.strictEqual(update['keywords/$draft'], null, '$draft keyword dropped');
     assert.strictEqual(update['keywords/$seen'], true, 'marked seen');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('sendEmail uploads attachment files as blobs and references them with disposition attachment', async (t) => {
+  const { writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const attPath = join(tmpdir(), `test-attachment-${Date.now()}.pdf`);
+  await writeFile(attPath, Buffer.from('%PDF-fake'));
+
+  t.after(async () => { await rm(attPath, { force: true }); });
+
+  const uploads: string[] = [];
+  let createParams: any = null;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: any, init: any) => {
+    const urlStr = String(url);
+    if (urlStr.includes('/session')) {
+      return new Response(JSON.stringify(SESSION), { headers: { 'content-type': 'application/json' } });
+    }
+    if (urlStr.includes('/upload/')) {
+      uploads.push(urlStr.replace(/^.*\/upload\//, ''));
+      return new Response(JSON.stringify({ blobId: 'BLOB-1', size: 9, type: 'application/pdf' }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    const body = JSON.parse(init.body);
+    const methodResponses = body.methodCalls.map(([method, params]: any, i: number) => {
+      let result: any = null;
+      if (method === 'Mailbox/get') {
+        result = { list: MAILBOXES, notFound: [] };
+      } else if (method === 'Identity/get') {
+        result = { list: [{ id: 'id1', name: 'Sage', email: 'sage@test.example' }] };
+      } else if (method === 'Email/set' && params.create) {
+        createParams = params.create.draft;
+        result = { created: { draft: { id: 'E-1', blobId: 'b', size: 1, threadId: 't' } }, notCreated: null };
+      } else if (method === 'EmailSubmission/set') {
+        result = { created: { send: { id: 'S1', sendAt: '2026-09-27T00:00:00Z', undoStatus: 'final' } }, notCreated: null };
+      } else if (method === 'Email/set' && params.update) {
+        result = { updated: {}, notUpdated: null };
+      }
+      return [method, result, `c${i}`];
+    });
+    return new Response(JSON.stringify({ methodResponses }), {
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as any;
+
+  try {
+    const client = new JMAPClient({
+      apiUrl: 'https://jmap.test/api',
+      sessionUrl: 'https://jmap.test/session',
+      token: 'TESTTOKEN',
+    });
+    await client.sendEmail({
+      to: ['dest@test.example'], subject: 's', body: 'b',
+      attachments: [{ path: attPath }],
+    });
+    assert.deepStrictEqual(uploads, ['acc1'], 'exactly one blob upload to the right account');
+    assert.ok(createParams, 'Email/set create captured');
+    // Fastmail rejects the top-level `attachments` create property — the
+    // attachment must ride as a subPart of a multipart/mixed bodyStructure.
+    assert.deepStrictEqual(createParams.bodyStructure, {
+      type: 'multipart/mixed',
+      subParts: [
+        { partId: 'body', type: 'text/plain' },
+        {
+          blobId: 'BLOB-1',
+          type: 'application/pdf',
+          name: attPath.split('/').pop(),
+          disposition: 'attachment',
+        },
+      ],
+    });
   } finally {
     globalThis.fetch = realFetch;
   }
