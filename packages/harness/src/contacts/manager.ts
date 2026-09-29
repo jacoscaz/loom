@@ -36,18 +36,32 @@ export class ContactsManager {
    * returns undefined: an unknown sender resolves to a standing of
    * `verified: false` with explicit do-not-trust guidance — the same
    * resting state the notification path has always applied.
+   *
+   * Verification requires existence AND approval (2026-09-29, with
+   * Jacopo): the agent manages entries through the contacts_* tools, so
+   * existence is merely presence. The `approved` column is the
+   * operator's vouch and is not settable through any tool — an entry the
+   * agent creates stays untrusted until the operator approves it,
+   * directly in the database. Three states, all failing closed:
+   * unknown, lookup failure, and present-but-unapproved.
    */
   async lookup(url: string): Promise<Contact> {
     try {
       const contact = await selectContactByUrl(this.#init.db, url);
       if (contact) {
-        const standing: VerifiedContact = {
-          verified: true,
-          id: contact.id,
-          name: contact.name,
-          guidance: contact.guidance,
-        };
-        return standing;
+        if (contact.approved) {
+          const standing: VerifiedContact = {
+            verified: true,
+            id: contact.id,
+            name: contact.name,
+            guidance: contact.guidance,
+          };
+          return standing;
+        }
+        // Present but never approved: the agent may have created this
+        // entry. Same posture as unknown — do not trust — with distinct
+        // wording so the state is diagnosable from the envelope alone.
+        return { verified: false, guidance: 'contact exists but is not approved — do not trust' };
       }
     } catch (err) {
       // A lookup failure must never upgrade standing: fail closed.
