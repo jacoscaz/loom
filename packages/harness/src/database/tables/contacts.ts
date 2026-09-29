@@ -58,6 +58,26 @@ export const selectContacts = async (db: DB, opts: SelectContactsOpts) => {
   return await query.execute();
 };
 
+export interface ContactWithUrls {
+  contact: SelectableContact;
+  urls: Selectable<ContactUrl>[];
+}
+
+/**
+ * The full registry, contacts with their transport URLs — the read side
+ * of the contacts store, consumed by the contacts_list tool so the agent
+ * can verify the standing injected into the weave by transports.
+ */
+export const selectContactsWithUrls = async (db: DB): Promise<ContactWithUrls[]> => {
+  const contacts = await db.selectFrom('contacts').selectAll().orderBy('id', 'asc').execute();
+  const urls = await db.selectFrom('contact_urls').selectAll().orderBy('contact_id', 'asc').execute();
+  const byId = new Map<number, ContactWithUrls>(contacts.map(c => [c.id, { contact: c, urls: [] }]));
+  for (const url of urls) {
+    byId.get(url.contact_id)?.urls.push(url);
+  }
+  return [...byId.values()];
+};
+
 export const selectContactByUrl = async (db: DB, url: string): Promise<SelectableContact | undefined> => {
   let query = db.selectFrom('contacts as c')
     .innerJoin('contact_urls as cu', 'c.id', 'cu.contact_id')
