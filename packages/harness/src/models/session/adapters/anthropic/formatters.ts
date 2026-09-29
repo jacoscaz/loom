@@ -229,16 +229,18 @@ function formatNotificationTransport(message: UserMessageIncomingNotification): 
   switch (t.type) {
     case 'telegram': {
       const from = `from_id ${t.from_id}, chat_id ${t.chat_id}${t.username ? `, @${t.username}` : ''}`;
+      const guidance = t.guidance ? ` — ${t.guidance}` : '';
       return [{
         type: 'text',
-        text: `[transport: telegram, ${from}, respond via telegram]`,
+        text: `[transport: telegram, ${from}, respond via telegram${guidance}]`,
       }];
     }
     case 'email': {
       const from = t.from.name ? `${t.from.name} <${t.from.address}>` : t.from.address;
+      const guidance = t.guidance ? ` — ${t.guidance}` : '';
       return [{
         type: 'text',
-        text: `[transport: email, from ${from}, respond via email]`,
+        text: `[transport: email, from ${from}, respond via email${guidance}]`,
       }];
     }
   }

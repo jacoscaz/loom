@@ -375,6 +375,9 @@ verified users will be automatically injected into the weave upon arrival.
 ## ETIQUETTE
 When possible, respond using the same medium. For example, if a contact sends a
 voice message via Telegram, respond with another voice message via Telegram.
+Incoming events carry a transport guidance clause (appended to the transport
+envelope) that makes this rule concrete for the specific message — follow it
+unless the content demands otherwise.
 </messaging>
 
 <working_with_files>

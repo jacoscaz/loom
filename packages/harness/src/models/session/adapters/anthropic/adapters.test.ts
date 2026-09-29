@@ -146,6 +146,29 @@ test('formatMessages: a native turn with tool_req blocks projects as ONE assista
   assert.deepEqual(tool_use.input, { command: 'ls' });
 });
 
+test('formatMessages: transport guidance rides the envelope (voice note reply-medium rule)', () => {
+  const history: Message[] = [
+    {
+      role: 'user', type: 'notification',
+      method: 'message/incoming',
+      transport: {
+        type: 'telegram', from_id: 1, chat_id: 2,
+        guidance: 'voice note received — prefer replying with telegram_send_voice',
+      },
+      blocks: [{ type: 'voice', path: '/tmp/x.ogg', mimeType: 'audio/ogg', duration: 12, transcription: 'hi' }],
+    },
+  ];
+
+  const wire = formatMessages(projectMessages(history, FAKE_ADAPTER.projection), FAKE_ADAPTER);
+  const texts = (wire[0].content as any[]).filter(b => b.type === 'text').map(b => b.text);
+  const transport = texts.find(t => t.startsWith('[transport: telegram'));
+  assert.ok(transport, 'transport envelope present');
+  assert.ok(
+    transport.includes('respond via telegram — voice note received — prefer replying with telegram_send_voice'),
+    `guidance appended to transport line, got: ${transport}`,
+  );
+});
+
 test('formatMessages: consecutive user messages merge, preserving block order', () => {
   const history: Message[] = [
     {
