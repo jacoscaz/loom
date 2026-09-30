@@ -4,9 +4,8 @@
     "packages/lib-utils"
   ],
   "devDependencies": {
-    "@runtyped/type-compiler": "^2.0.0",
-    "@types/node": "^26.0.1",
-    "typescript": "^6.0.3"
+    "@runtyped/typescript": "7.1.0",
+    "@types/node": "^26.0.1"
   },
   "scripts": {
     "ts:build": "npm run ts:clean && tsc -b ./tsconfig.build.json",
@@ -14,8 +13,7 @@
     "ts:clean": "rm -rf packages/*/dist && rm -f packages/*/tsconfig.tsbuildinfo && rm -f ./tsconfig.build.tsbuildinfo",
     "npm:clean": "rm -rf node_modules && rm -rf packages/*/node_modules",
     "build": "npm run ts:build",
-    "test": "npm run --workspaces --if-present test",
-    "postinstall": "npx runtyped-install-transformer"
+    "test": "npm run --workspaces --if-present test"
   },
   "dependencies": {}
 }

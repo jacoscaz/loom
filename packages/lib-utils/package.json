@@ -13,9 +13,8 @@
     "start": "node dist/server.js"
   },
   "devDependencies": {
-    "@runtyped/type-compiler": "^2.0.0",
-    "@types/node": "^26.0.1",
-    "typescript": "^6.0.3"
+    "@runtyped/typescript": "7.1.0",
+    "@types/node": "^26.0.1"
   },
   "dependencies": {
     "@runtyped/type": "^2.0.0",
