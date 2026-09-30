@@ -99,6 +99,24 @@ export const sanitizeForJsonb = (text: string): string =>
  * `max_dimension` and recompresses as JPEG (quality 80) unless already small.
  * Returns a base64 data block plus a short provenance note.
  */
+/**
+ * Sniffs the actual image format from magic bytes. The passthrough path in
+ * normalizeImage returns original bytes (any format), and the recompress path
+ * produces real JPEGs — the declared mimeType must match the actual bytes:
+ * Anthropic's API validates base64/media_type coherence and rejects mismatches.
+ * Same magic-byte rules as the telegram notifier's inbound sniffing.
+ */
+export const sniffImageMime = (buf: Buffer): string => {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf.length >= 4 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
+  if (buf.length >= 12 && buf.subarray(0, 4).toString('ascii') === 'RIFF' && buf.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (buf.length >= 6) {
+    const head6 = buf.subarray(0, 6).toString('ascii');
+    if (head6 === 'GIF87a' || head6 === 'GIF89a') return 'image/gif';
+  }
+  return 'image/jpeg';
+};
+
 export const normalizeImage = async (
   input: Buffer,
   max_dimension: number = IMAGE_MAX_DIMENSION,
@@ -136,7 +154,7 @@ export const normalizeImage = async (
   if (animated) notes.push('animated image flattened to first frame');
   const note = notes.length > 0 ? ` (${notes.join('; ')})` : '';
 
-  return { mimeType: 'image/jpeg', data, note };
+  return { mimeType: sniffImageMime(out_buffer), data, note };
 };
 
 export const initFilesTools = (ctx: CompleteContext) => {
