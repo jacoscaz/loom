@@ -34,6 +34,7 @@ import { initTimeTools } from "./tools/servers/time.js";
 import { initSpeechTools } from "./tools/servers/speech.js";
 import { initContinuityTools } from "./tools/servers/continuity.js";
 import { initPinningTools } from "./tools/servers/pinning.js";
+import { initContactsTools } from "./tools/servers/contacts.js";
 import { initAnchorsTools } from "./tools/servers/anchors.js";
 import { initSessionTools } from "./tools/servers/session.js";
 import { initFilesTools } from "./tools/servers/files.js";
@@ -161,6 +162,8 @@ initSpeechTools(complete_context);
 initContinuityTools(complete_context);
 
 initPinningTools(complete_context);
+
+initContactsTools(complete_context);
 
 initAnchorsTools(complete_context);
 
