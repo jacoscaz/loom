@@ -13,6 +13,12 @@ export interface Contact {
   id: GeneratedAlways<number>;
   name: string;
   guidance: string;
+  /**
+   * The operator's vouch — the ONLY verification signal. Deliberately
+   * not settable through any contact tool: the agent can manage entries
+   * but cannot grant standing. Existence is presence; approval is trust.
+   */
+  approved: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -85,4 +91,34 @@ export const selectContactByUrl = async (db: DB, url: string): Promise<Selectabl
     .selectAll('c')
     .select(eb => sql<string>`concat(${eb.ref('c.guidance')}, ' ', ${eb.ref('cu.guidance')})`.as('guidance'));
   return await query.executeTakeFirst();
+};
+
+export const insertContact = async (db: DB, values: InsertableContact): Promise<SelectableContact> => {
+  return await db.insertInto('contacts')
+    .values(values)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+};
+
+export const insertContactUrl = async (db: DB, values: Insertable<ContactUrl>): Promise<Selectable<ContactUrl>> => {
+  return await db.insertInto('contact_urls')
+    .values(values)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+};
+
+/**
+ * Deletes a contact and its URLs. The contact_urls FK is restrictive
+ * (no cascade), so URLs go first — deletion is two steps or nothing.
+ */
+export const deleteContactCascade = async (db: DB, contactId: number): Promise<void> => {
+  await db.deleteFrom('contact_urls').where('contact_id', '=', contactId).execute();
+  await db.deleteFrom('contacts').where('id', '=', contactId).execute();
+};
+
+export const deleteContactUrl = async (db: DB, url: string): Promise<number> => {
+  return await db.deleteFrom('contact_urls').where('url', '=', url)
+    .returning('id')
+    .execute()
+    .then(rows => rows.length);
 };
