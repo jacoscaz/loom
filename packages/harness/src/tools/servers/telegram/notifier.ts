@@ -145,6 +145,15 @@ async function handleUpdate(
     return;
   }
 
+  // Transport guidance: the reply-medium rule attached to the event it
+  // governs. Voice notes are the case that matters — the sender chose
+  // voice because reading/writing is inconvenient, so the reply-medium
+  // expectation must arrive WITH the message (structure), not rely on
+  // the etiquette section of the system prompt (periphery).
+  const guidance = content.some(b => b.type === 'voice')
+    ? 'voice note received — prefer replying with telegram_send_voice (a spoken reply); fall back to text only if voice cannot carry the answer or the sender explicitly asks for written text'
+    : undefined;
+
   // Await: notify injects into the session and can run the model —
   // fire-and-forget would make any failure an unhandled rejection.
   await ctx.buses.notifications.notify({
@@ -158,6 +167,7 @@ async function handleUpdate(
       chat_id: message.chat.id,
       from_id: from.id,
       username: from.username,
+      guidance,
     },
   } satisfies UserMessageIncomingNotification);
 

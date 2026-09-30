@@ -254,14 +254,14 @@ function formatNotificationTransport(message: UserMessageIncomingNotification): 
       const from = `from_id ${t.from_id}, chat_id ${t.chat_id}${t.username ? `, @${t.username}` : ''}`;
       return [{
         type: 'text',
-        text: `[transport: telegram, ${from}, respond via telegram]`,
+        text: `[transport: telegram, ${from}, respond via telegram${t.guidance ? ` — ${t.guidance}` : ''}]`,
       }];
     }
     case 'email': {
       const from = t.from.name ? `${t.from.name} <${t.from.address}>` : t.from.address;
       return [{
         type: 'text',
-        text: `[transport: email, from ${from}, respond via email]`,
+        text: `[transport: email, from ${from}, respond via email${t.guidance ? ` — ${t.guidance}` : ''}]`,
       }];
     }
   }
