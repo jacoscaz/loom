@@ -15,7 +15,7 @@
   "homepage": "https://github.com/jacoscaz/loom",
   "license": "MIT",
   "devDependencies": {
-    "@runtyped/typescript": "^7.1.0",
+    "@runtyped/typescript": "^7.1.1",
     "@types/node": "^26.0.1",
     "@types/ws": "^8.18.1"
   },

@@ -4,7 +4,7 @@
     "packages/lib-utils"
   ],
   "devDependencies": {
-    "@runtyped/typescript": "7.1.0",
+    "@runtyped/typescript": "7.1.1",
     "@types/node": "^26.0.1"
   },
   "scripts": {
