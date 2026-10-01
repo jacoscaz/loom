@@ -15,10 +15,9 @@
   "homepage": "https://github.com/jacoscaz/loom",
   "license": "MIT",
   "devDependencies": {
-    "@runtyped/type-compiler": "^2.0.0",
+    "@runtyped/typescript": "^7.1.1",
     "@types/node": "^26.0.1",
-    "@types/ws": "^8.18.1",
-    "typescript": "^6.0.3"
+    "@types/ws": "^8.18.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.127.0",
