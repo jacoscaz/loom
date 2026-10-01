@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "outDir": "out5",
+    "experimentalDecorators": true,
+    "esModuleInterop": true,
+    "composite": true,
+    "declaration": true,
+    "incremental": true,
+    "types": ["node"]
+  },
+  "include": ["t4.ts"]
+}

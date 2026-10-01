@@ -296,7 +296,12 @@ export const findStrippedKeys = (raw: unknown, casted: unknown, path = ''): stri
   return [];
 };
 
-export const getConfigFromProcessArgv = async (): Promise<Config> => {
+// Function DECLARATION, not an arrow const: the runtyped compiler's
+// arrow-function path wraps the body in __assignType and drops the
+// type argument of nested receive-type calls (cast<Config>), which
+// makes cast() throw NoTypeReceived at startup. Arrow→function is a
+// no-op semantically; upstream runtyped issue tracks the transformer.
+export async function getConfigFromProcessArgv(): Promise<Config> {
   let file_path = process.argv[2];
   assert(file_path, 'Missing config file path');
   file_path = resolve(process.cwd(), file_path);
@@ -320,4 +325,4 @@ export const getConfigFromProcessArgv = async (): Promise<Config> => {
     }
     throw err;
   }
-};
+}

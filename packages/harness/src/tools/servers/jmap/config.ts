@@ -18,10 +18,13 @@ export interface JmapConfig {
   poll_interval_ms?: number;
 }
 
-export const loadJmapConfig = async (file_path: string): Promise<JmapConfig> => {
+// Function DECLARATION, not an arrow const — see config.ts for why
+// (the runtyped compiler drops cast<T> type arguments inside arrow
+// functions, making cast() throw NoTypeReceived at runtime).
+export async function loadJmapConfig(file_path: string): Promise<JmapConfig> {
   file_path = resolve(process.cwd(), file_path);
   const as_string = await readFile(file_path, 'utf8');
   const as_toml = parseTOML(as_string) as Record<string, unknown>;
   fillEnvVarsPlaceholders(as_toml, process.env);
   return cast<JmapConfig>(as_toml);
-};
+}
