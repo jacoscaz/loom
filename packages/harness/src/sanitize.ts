@@ -21,6 +21,19 @@
  * Only two classes are replaced, the ones Postgres JSONB rejects:
  *  - lone (unpaired) UTF-16 surrogates;
  *  - the NUL code point (U+0000).
+ *
+ * Why a byte-level check cannot replace this: JSONB's rejection is a
+ * code-point rule, not a byte rule. The crashing payload serialized to
+ * pure-ASCII JSON text (`{"a":"\ud800"}`) — buffer.isUtf8() on it is
+ * TRUE, and would have waved it through to the same crash. Well-formed
+ * JSON.stringify guarantees valid JSON text even for dirty strings (it
+ * escapes lone surrogates), and JSON.parse happily round-trips them;
+ * JSONB's grammar is stricter than RFC 8259's and refuses escapes that
+ * do not denote storable Unicode scalars. The unit of validity that
+ * matters at the store boundary is the code point, so that is the unit
+ * this guard repairs at. (Genuinely invalid UTF-8 BYTES cannot reach
+ * message.data: every inbound path decodes through Node's UTF-8
+ * decoder, which already replaces invalid sequences with U+FFFD.)
  */
 
 /** A high surrogate not followed by a low one, or a low surrogate not preceded by a high one. */
