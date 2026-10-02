@@ -5,6 +5,7 @@ import { type Selectable } from "kysely";
 import { type Updateable } from "kysely";
 import { type DB, ensureTrx } from "../client.js";
 import { type Message } from "../../types/messages.js";
+import { sanitizeDeep } from "../../sanitize.js";
 import { type SelectableContinuityRecord } from "./continuity_records.js";
 import assert from "node:assert";
 import { sql } from "kysely";
@@ -36,9 +37,17 @@ export type AInsertableDBMessage = Insertable<ADBMessage>;
 export type ASelectableDBMessage = Selectable<ADBMessage>;
 export type AUpdateableDBMessage = Updateable<ADBMessage>;
 
+/**
+ * UTF8 guard: message data reaching JSONB must be free of lone surrogates
+ * and NUL code points (see sanitize.ts). Applied at every message write —
+ * this function and the activation-loop batch insert below are the only
+ * two insert sites in the codebase.
+ */
+const sanitizeInsertable = <M extends AInsertableDBMessage>(m: M): M => ({ ...m, data: sanitizeDeep(m.data) });
+
 export const insertMessage = async (db: DB, message: AInsertableDBMessage | AInsertableDBMessage[]): Promise<ASelectableDBMessage> => {
   const result = await db.insertInto('messages')
-    .values(message)
+    .values(Array.isArray(message) ? message.map(sanitizeInsertable) : sanitizeInsertable(message))
     .returningAll()
     .executeTakeFirstOrThrow();
   return result;
@@ -52,7 +61,7 @@ export const insertMessage = async (db: DB, message: AInsertableDBMessage | AIns
  */
 export const updateMessageData = async (db: DB, id: number, data: Message): Promise<void> => {
   await db.updateTable('messages')
-    .set({ data })
+    .set({ data: sanitizeDeep(data) })
     .where('id', '=', id)
     .execute();
 };
@@ -158,7 +167,7 @@ export const selectMessagesForActivation = async (db: DB, session_id: number, ha
   }
   // Insert new messages returned by the handler.
   if (new_messages.length > 0) {
-    await db.insertInto('messages').values(new_messages).execute();
+    await db.insertInto('messages').values(new_messages.map(sanitizeInsertable)).execute();
   }
   // We signal that the processing loop can continue, given we might just
   // have added new non-processed messages. Note that this might have been

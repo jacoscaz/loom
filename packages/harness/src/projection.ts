@@ -1,5 +1,6 @@
 import { Message, UserBlock } from "./types/messages.js";
 import { MessageBlock, TextBlock, VoiceBlock } from "./types/blocks.js";
+import { sanitizeDeep } from "./sanitize.js";
 
 /**
  * Message projection: the single content-decision layer shared by every
@@ -156,33 +157,47 @@ export const projectMessage = (message: Message, opts: ProjectOptions): Message 
     return null;
   }
 
+  let projected: Message;
   switch (message.type) {
     case 'tool_req':
-      // Params are projection-opaque: bounded at serialization time.
-      return message;
+      // Params are projection-opaque: bounded at serialization time. They
+      // are still UTF8-sanitized below — encoding repair, not a content
+      // decision; nothing is dropped or truncated here.
+      projected = message;
+      break;
 
     case 'tool_res':
-      return {
+      projected = {
         ...message,
         results: message.results.map(result => ({
           ...result,
           blocks: projectBlocks(result.blocks, opts),
         })),
       };
+      break;
 
     case 'notification':
-      return {
+      projected = {
         ...message,
         blocks: projectBlocks(message.blocks, opts),
       };
+      break;
 
     case 'input':
       // Narrow by role so each branch's block family matches its message type.
       if (message.role === 'agent') {
-        return { ...message, blocks: projectBlocks(message.blocks, opts) };
+        projected = { ...message, blocks: projectBlocks(message.blocks, opts) };
+      } else {
+        projected = { ...message, blocks: projectBlocks(message.blocks, opts) };
       }
-      return { ...message, blocks: projectBlocks(message.blocks, opts) };
+      break;
   }
+
+  // UTF8 guard: content reaching context must be JSONB-safe regardless of
+  // where it entered — including legacy rows persisted before the write-
+  // side guard existed (see sanitize.ts). Lone surrogates and NUL become
+  // U+FFFD; valid content passes through byte-identical.
+  return sanitizeDeep(projected);
 };
 
 /**
