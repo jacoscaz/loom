@@ -38,6 +38,8 @@ import { initContactsTools } from "./tools/servers/contacts.js";
 import { initAnchorsTools } from "./tools/servers/anchors.js";
 import { initSessionTools } from "./tools/servers/session.js";
 import { initFilesTools } from "./tools/servers/files.js";
+import { initCrontabTools } from "./tools/servers/crontab.js";
+import { CrontabRunner } from './crontab/runner.js';
 import { initTerminalTools } from "./tools/servers/terminal/index.js";
 import { ContactsManager } from "./contacts/manager.js";
 import { SpeechManager } from "./speech/manager.js";
@@ -124,6 +126,7 @@ const complete_context: CompleteContext = {
   contacts: new ContactsManager(init_context),
   speech: new SpeechManager(init_context),
   recaller: new Recaller(init_context),
+  crontab: new CrontabRunner(init_context),
   managers: {
     tools: new RootToolManager(init_context),
     models: new ModelManager(init_context),
@@ -139,6 +142,10 @@ await complete_context.emygdala.initialize();
 await complete_context.recaller.initialize();
 await complete_context.distiller.initialize(300_000);
 await complete_context.embedder.initialize(60_000);
+// After sessions.initialize(): the scan loop and heartbeat dispatch both
+// resolve main_session_id (notification/event injection), so the crontab
+// must not start scanning before the main session exists.
+await complete_context.crontab.initialize();
 
 // ============================================================================
 //                          TOOL SERVER REGISTRATION
@@ -178,6 +185,8 @@ initJMAPTools(complete_context);
 initTerminalTools(complete_context);
 
 initTelegramTools(complete_context);
+
+initCrontabTools(complete_context);
 
 // ============================================================================
 //                        MAIN SESSION INITIALIZATION

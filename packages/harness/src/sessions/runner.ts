@@ -169,6 +169,14 @@ export class SessionRunner extends WithContext<SessionRunnerEvents> {
         this.injectEventMessage('heartbeat', makeActivationPrompt(), false).catch(err => {
           this.#logger.error('heartbeat activation injection error: %s', errToString(err));
         });
+        // Crontab @heartbeat rows are presence-tied: dispatched at the
+        // heartbeat ACTIVATION moment (this block), never by the cheap
+        // internal tick. Results ride this or the next activation as
+        // event messages; they never wake the session by themselves
+        // (design of record: coord 8-2026-10-05-heartbeat-polling-hooks).
+        this._ctx.crontab.dispatchHeartbeatDue().catch(err => {
+          this.#logger.error('crontab heartbeat dispatch error: %s', errToString(err));
+        });
       }
     }
     this.run(undefined, undefined, SessionRunner.DEFAULT_MAX_QUERIES_PER_RUN);

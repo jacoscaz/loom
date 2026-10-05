@@ -211,6 +211,16 @@ export interface ConfigHeartbeat {
   quiet_after_ms: number;
 }
 
+export interface ConfigCrontab {
+  /** Wall-clock cap per hook execution, milliseconds. The child is
+   *  SIGKILLed at the cap. Default 60000. */
+  timeout_ms?: number;
+  /** Output capture cap per firing, bytes — also the child's maxBuffer.
+   *  Full (capped) output is recorded in the row's last_output regardless
+   *  of match/notify. Default 8192. */
+  max_output_bytes?: number;
+}
+
 export interface ConfigSession {
   /** Maximum activation-loop iterations per run() for the main session
    *  runner. A runaway loop costs bounded tokens; the limit-reached
@@ -258,6 +268,8 @@ export interface Config {
   heartbeat: ConfigHeartbeat;
   /** Session runner limits. Optional — defaults apply when absent. */
   session?: Partial<ConfigSession>;
+  /** Crontab hook execution caps. Optional — defaults apply when absent. */
+  crontab?: ConfigCrontab;
   /** Temp-file management (FileManager). Optional — defaults apply when absent. */
   files?: ConfigFiles;
   postgres: ConfigPostgres;

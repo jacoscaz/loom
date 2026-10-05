@@ -36,7 +36,16 @@ export interface UserTodoDueNotification extends BaseUserNotification {
   method: 'todo/due';
 }
 
+export interface UserCrontabFiredNotification extends BaseUserNotification {
+  method: 'crontab/fired';
+  /** Which hook fired (row name — the event's identity in the weave). */
+  hook_name: string;
+  exit_code: number | null;
+  timed_out: boolean;
+}
+
 export type UserNotification =
   | UserMessageIncomingNotification
   | UserTodoDueNotification
+  | UserCrontabFiredNotification
   ;

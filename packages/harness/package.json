@@ -24,6 +24,7 @@
     "@loom/utils": "^0.0.1",
     "@runtyped/type": "^2.0.0",
     "@xterm/headless": "^6.0.0",
+    "cron-schedule": "^6.0.0",
     "croner": "^10.0.1",
     "date-fns": "^4.4.0",
     "dotenv": "^17.4.2",
