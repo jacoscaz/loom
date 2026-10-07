@@ -92,6 +92,13 @@ export class OpenAISessionModel extends AbstractSessionModel {
       // a documented chat.completions parameter anywhere — strict models
       // opt out via options.extras.strict_wire.
       const session_id = this.#extras.strict_wire ? undefined : opts.session_id;
+      // AbortSignal rides in the REQUEST OPTIONS (second argument), never
+      // in the body: the SDK forwards options.signal to the underlying
+      // request, but a signal left in the params object is serialized into
+      // the JSON body as `signal: {}` — which strict providers (Mistral)
+      // reject with 422 extra_forbidden (captured live via a request
+      // dump, 2026-10-07; it had ridden in every request since the first
+      // commit, tolerated silently by lenient providers).
       const stream = this.#client.chat.completions.stream({
         ...api_extras,
         messages,
@@ -100,10 +107,6 @@ export class OpenAISessionModel extends AbstractSessionModel {
         model: this.#model,
         reasoning_effort: this.#reasoning as OpenAIReasoningEffort,
         stream_options: { include_usage: true },
-        // Aborted by the session-model timeout wrapper on expiry; the SDK
-        // then errors the stream itself (covering mid-stream stalls, which
-        // the SDK's own time-to-headers timeout does not).
-        signal,
         tools: opts.tools.map(t => ({
           type: 'function',
           function: {
@@ -112,6 +115,11 @@ export class OpenAISessionModel extends AbstractSessionModel {
             parameters: t.params_schema,
           },
         })),
+      }, {
+        // Aborted by the session-model timeout wrapper on expiry; the SDK
+        // then errors the stream itself (covering mid-stream stalls, which
+        // the SDK's own time-to-headers timeout does not).
+        signal,
       });
       const [response, usage] = await this.#consumeStream(stream, on_activity);
       const parsed_messages = parseMessage(response);
