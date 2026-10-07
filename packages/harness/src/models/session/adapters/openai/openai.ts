@@ -20,12 +20,14 @@ export class OpenAISessionModel extends AbstractSessionModel {
   #model: string;
   #client: OpenAI;
   #extras: Record<string, any>;
+  #opts: ConfigModelOpenAI['options'];
   #reasoning: OpenAIReasoningEffort;
 
   constructor(opts: ConfigModelOpenAI) {
     super(opts);
     this.#model = opts.options.model;
     this.#extras = opts.options.extras ?? {};
+    this.#opts = opts.options;
     this.#client = new OpenAI({
       apiKey: opts.options.api_key,
       baseURL: opts.options.base_url,
@@ -55,14 +57,15 @@ export class OpenAISessionModel extends AbstractSessionModel {
 
   /**
    * How thinking blocks replay on the wire. 'field' (default) is the
-   * DeepSeek-style `reasoning_content` extension. 'blocks' is Mistral's
+   * DeepSeek-style `reasoning_content` extension. 'mistral' is Mistral's
    * documented shape (2026-10): assistant content is a list of typed
    * chunks (ThinkChunk/TextChunk) — `reasoning_content` on INPUT is
    * rejected as extra_forbidden (verified live, HTTP 422 with explicit
-   * Pydantic detail). Declared per-model via options.extras.
+   * Pydantic detail). Declared per-model via options.thinking_wire_style
+   * (adapter-level semantics, not provider passthrough).
    */
-  get thinking_wire_style(): 'field' | 'blocks' {
-    return this.#extras.thinking_wire_style === 'blocks' ? 'blocks' : 'field';
+  get thinking_wire_style(): 'field' | 'mistral' {
+    return this.#opts.thinking_wire_style === 'mistral' ? 'mistral' : 'field';
   }
 
   async _query(opts: ModelQueryOpts, signal?: AbortSignal, on_activity: () => void = () => { }): Promise<ModelQueryResults> {
@@ -79,19 +82,18 @@ export class OpenAISessionModel extends AbstractSessionModel {
         role: 'system',
         content: opts.system_prompt,
       } satisfies ChatCompletionMessageParam);
-      // Harness-only keys ride in options.extras (config is one dict) but are
-      // NEVER API parameters — providers like Mistral reject unknown body
-      // fields with 422 extra_forbidden (live-verified 2026-10-07:
-      // thinking_wire_style in the spread reproduced the exact live error).
+      // extras is reserved for provider-specific API passthrough and is
+      // spread into the request body as-is; adapter-level keys
+      // (thinking_wire_style, strict_wire) live at options level and are
+      // never spread — providers like Mistral reject unknown body fields
+      // with 422 extra_forbidden (live-verified 2026-10-07).
       const api_extras: Record<string, any> = { ...this.#extras };
-      delete api_extras.thinking_wire_style;
-      delete api_extras.strict_wire;
       // Some providers reject unknown top-level params outright (Mistral:
       // 422 extra_forbidden on session_id, live-verified 2026-10-07); the
       // field has ridden in this request since the first commit but is not
       // a documented chat.completions parameter anywhere — strict models
-      // opt out via options.extras.strict_wire.
-      const session_id = this.#extras.strict_wire ? undefined : opts.session_id;
+      // opt out via options.strict_wire.
+      const session_id = this.#opts.strict_wire ? undefined : opts.session_id;
       // AbortSignal rides in the REQUEST OPTIONS (second argument), never
       // in the body: the SDK forwards options.signal to the underlying
       // request, but a signal left in the params object is serialized into
