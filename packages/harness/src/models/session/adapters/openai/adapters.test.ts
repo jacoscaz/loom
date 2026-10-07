@@ -422,7 +422,10 @@ test('parseMessage: Mistral block content — unknown chunk types are kept loudl
   assert.equal(text.text, 'answer');
 });
 
-test('formatAgentInput: thinking_wire_style blocks — Mistral chunk-list content, no reasoning_content field', () => {
+test('formatAgentInput: thinking_wire_style blocks — tool-call turns fall back to plain string content', () => {
+  // Mistral rejects ThinkChunk content combined with tool_calls (HTTP 400,
+  // live-verified 2026-10-07; text-only chunks + tool_calls ARE accepted,
+  // but the plain string shape is what the tool-turn contract needs).
   const turn: Message = {
     role: 'agent',
     type: 'input',
@@ -439,6 +442,27 @@ test('formatAgentInput: thinking_wire_style blocks — Mistral chunk-list conten
 
   const wire = formatMessages([{ role: 'user', type: 'input', blocks: [{ type: 'text', text: 'hi' }] }, turn], BLOCKS_ADAPTER);
   const asst = wire.find(m => m.role === 'assistant') as { content: unknown; reasoning_content?: unknown; tool_calls?: unknown[] };
+  assert.equal(asst.content, 'hello', 'tool-call turn replays as plain string — no chunk list');
+  assert.equal(asst.reasoning_content, undefined);
+  assert.ok(Array.isArray(asst.tool_calls) && asst.tool_calls.length === 1, 'tool_calls ride alongside');
+});
+
+test('formatAgentInput: thinking_wire_style blocks — thinking+text replay as Mistral chunk list', () => {
+  const turn: Message = {
+    role: 'agent',
+    type: 'input',
+    blocks: [
+      { type: 'thinking', text: 'greet back' },
+      { type: 'text', text: 'hello' },
+    ],
+  } as Message;
+  const BLOCKS_ADAPTER = {
+    ...FAKE_THINKING_ADAPTER,
+    thinking_wire_style: 'blocks',
+  } as unknown as OpenAISessionModel;
+
+  const wire = formatMessages([{ role: 'user', type: 'input', blocks: [{ type: 'text', text: 'hi' }] }, turn], BLOCKS_ADAPTER);
+  const asst = wire.find(m => m.role === 'assistant') as { content: unknown; reasoning_content?: unknown };
   // Mistral's shape: content is a list of typed chunks, thinking first
   const content = asst.content as Array<Record<string, unknown>>;
   assert.ok(Array.isArray(content), 'content is a chunk list in blocks style');
@@ -449,7 +473,6 @@ test('formatAgentInput: thinking_wire_style blocks — Mistral chunk-list conten
   // The DeepSeek-style extension field must NOT appear — Mistral rejects it
   // as extra_forbidden (HTTP 422, live-verified 2026-10-07).
   assert.equal(asst.reasoning_content, undefined);
-  assert.ok(Array.isArray(asst.tool_calls) && asst.tool_calls.length === 1, 'tool_calls ride alongside');
 });
 
 test('formatAgentInput: thinking_wire_style blocks — no thinking falls back to plain string', () => {
