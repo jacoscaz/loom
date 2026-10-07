@@ -79,11 +79,24 @@ export class OpenAISessionModel extends AbstractSessionModel {
         role: 'system',
         content: opts.system_prompt,
       } satisfies ChatCompletionMessageParam);
+      // Harness-only keys ride in options.extras (config is one dict) but are
+      // NEVER API parameters — providers like Mistral reject unknown body
+      // fields with 422 extra_forbidden (live-verified 2026-10-07:
+      // thinking_wire_style in the spread reproduced the exact live error).
+      const api_extras: Record<string, any> = { ...this.#extras };
+      delete api_extras.thinking_wire_style;
+      delete api_extras.strict_wire;
+      // Some providers reject unknown top-level params outright (Mistral:
+      // 422 extra_forbidden on session_id, live-verified 2026-10-07); the
+      // field has ridden in this request since the first commit but is not
+      // a documented chat.completions parameter anywhere — strict models
+      // opt out via options.extras.strict_wire.
+      const session_id = this.#extras.strict_wire ? undefined : opts.session_id;
       const stream = this.#client.chat.completions.stream({
-        ...this.#extras,
+        ...api_extras,
         messages,
         max_tokens: opts.max_output_size ?? this.max_ouput_size,
-        session_id: opts.session_id,
+        session_id,
         model: this.#model,
         reasoning_effort: this.#reasoning as OpenAIReasoningEffort,
         stream_options: { include_usage: true },

@@ -203,6 +203,18 @@ const formatAgentInput = (message: AgentInput, adapter: OpenAISessionModel): Ope
   // extra_forbidden (live-verified 2026-10-07). With no thinking to replay,
   // both styles emit the plain string content every provider accepts.
   if (thinking.length && adapter.thinking_wire_style === 'blocks') {
+    // Tool-call turns cannot carry the thinking chunk: Mistral rejects
+    // ThinkChunk content combined with tool_calls (HTTP 400, live-verified
+    // 2026-10-07; text-only chunks + tool_calls are accepted). Fall back to
+    // the plain string shape for those turns — the trace was already
+    // consumed; the text and the calls are what the continuation needs.
+    if (tool_calls.length) {
+      return [{
+        role: 'assistant',
+        content: content.length ? content.join(' ') : undefined,
+        tool_calls,
+      } as OpenAI.ChatCompletionMessageParam];
+    }
     const wire_content: Array<Record<string, unknown>> = [];
     wire_content.push({
       type: 'thinking',
