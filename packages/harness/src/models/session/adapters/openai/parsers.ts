@@ -14,6 +14,20 @@ import { type UnsupportedBlock } from "../../../../types/blocks.js";
   * purposes; whether it is replayed to the provider is decided per-model at
   * format time (see OpenAISessionModel#replay_thinking).
   */
+/**
+ * Mistral ThinkChunk shape: `thinking` is either a list of TextChunks
+ * (documented form) or, defensively, a plain string (some providers flatten).
+ */
+const thinkingTraceText = (thinking: unknown): string => {
+  if (Array.isArray(thinking)) {
+    return (thinking as unknown[])
+      .map(t => (typeof (t as Record<string, unknown>)?.text === 'string' ? (t as Record<string, unknown>).text as string : ''))
+      .filter(Boolean)
+      .join('\n');
+  }
+  return typeof thinking === 'string' ? thinking : '';
+};
+
 export const parseMessage = (message: OpenAI.ChatCompletionMessage): AgentMessage[] => {
   const input: AgentInput = {
     role: 'agent',
@@ -23,11 +37,40 @@ export const parseMessage = (message: OpenAI.ChatCompletionMessage): AgentMessag
   // Tool requests are blocks WITHIN the turn (see types/messages.ts):
   // the response's grouping — content and tool_calls together — is
   // preserved end to end.
-  if (message.content) {
+  // Standard OpenAI responses carry content as a string. Mistral's reasoning
+  // models (documented deviation, docs.mistral.ai capabilities/reasoning)
+  // return `content` as a LIST of typed chunks instead — ThinkChunk
+  // (`type: "thinking"`, `thinking` itself a list of TextChunks) and
+  // TextChunk (`type: "text"`). Normalize here so the canonical message
+  // shape is provider-independent: thinking chunks become thinking blocks,
+  // text chunks concatenate into one text block, unknown chunk types are
+  // captured as unsupported rather than dropped.
+  if (typeof message.content === 'string') {
     input.blocks.push({
       type: 'text',
       text: message.content,
     });
+  } else if (Array.isArray(message.content)) {
+    // The SDK types content as `string | null`, so Array.isArray narrows it
+    // to never — retype explicitly; the real payload is provider-defined.
+    const content_chunks = message.content as unknown[];
+    const texts: string[] = [];
+    for (const chunk of content_chunks) {
+      const c = chunk as Record<string, unknown>;
+      if (c?.type === 'text' && typeof c.text === 'string') {
+        texts.push(c.text);
+      } else if (c?.type === 'thinking') {
+        const trace = thinkingTraceText(c.thinking);
+        if (trace) {
+          input.blocks.push({ type: 'thinking', text: trace });
+        }
+      } else {
+        input.blocks.push(asUnsupported('content chunk', chunk));
+      }
+    }
+    if (texts.length > 0) {
+      input.blocks.push({ type: 'text', text: texts.join('') });
+    }
   }
   if ('reasoning_content' in message && typeof message.reasoning_content === 'string') {
     input.blocks.push({

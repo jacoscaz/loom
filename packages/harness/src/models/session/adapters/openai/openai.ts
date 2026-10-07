@@ -116,6 +116,14 @@ export class OpenAISessionModel extends AbstractSessionModel {
     // the full trace.
     let reasoning = '';
     let reasoning_alt = '';
+    // Mistral-style block content: when reasoning is on, some providers
+    // (documented deviation at docs.mistral.ai capabilities/reasoning)
+    // stream `delta.content` as a LIST of typed chunks — ThinkChunk and
+    // TextChunk — instead of a plain string. The SDK's accumulator only
+    // knows string content, so we accumulate block content ourselves and
+    // normalize the final message below.
+    let block_content_text = '';
+    let saw_block_content = false;
     // Per-chunk handler
     const onChunk = (chunk: OpenAI.ChatCompletionChunk) => {
       // Every received chunk re-arms the stall timeout: the model may think
@@ -132,6 +140,32 @@ export class OpenAISessionModel extends AbstractSessionModel {
         if (typeof delta?.reasoning === 'string') {
           reasoning_alt += delta.reasoning;
         }
+        const delta_content = delta?.content;
+        if (Array.isArray(delta_content)) {
+          saw_block_content = true;
+          for (const part of delta_content) {
+            const b = part as Record<string, unknown>;
+            if (b?.type === 'text' && typeof b.text === 'string') {
+              block_content_text += b.text;
+            } else if (b?.type === 'thinking') {
+              const trace = b.thinking;
+              if (Array.isArray(trace)) {
+                for (const t of trace) {
+                  const text = (t as Record<string, unknown>)?.text;
+                  if (typeof text === 'string') {
+                    reasoning += text;
+                  }
+                }
+              } else if (typeof trace === 'string') {
+                reasoning += trace;
+              }
+            }
+            // Unknown block types are dropped here by design: the
+            // non-streaming parser (parseMessage) is the authority for
+            // loud unsupported capture, and streaming deltas for such
+            // types have never been observed in production.
+          }
+        }
       }
     };
     // Cleanup handlers for chunk and end/abort events.
@@ -146,6 +180,12 @@ export class OpenAISessionModel extends AbstractSessionModel {
     stream.on('abort', onEndOrAbort);
     // Wait for the stream to complete and return the response.
     const response = await stream.finalMessage();
+    // Normalize Mistral-style block content: the final message gets a plain
+    // string content, so every downstream consumer (parseMessage included)
+    // sees the standard OpenAI shape.
+    if (saw_block_content) {
+      (response as unknown as Record<string, unknown>).content = block_content_text;
+    }
     // Attach the accumulated reasoning to the response.
     const full_reasoning = reasoning || reasoning_alt;
     if (full_reasoning) {
