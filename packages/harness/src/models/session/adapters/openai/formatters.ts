@@ -198,11 +198,11 @@ const formatAgentInput = (message: AgentInput, adapter: OpenAISessionModel): Ope
     }
   }
   // Thinking wire style: 'field' (default) = DeepSeek-style reasoning_content
-  // extension; 'blocks' = Mistral's documented shape, where assistant content
+  // extension; 'mistral' = Mistral's documented shape, where assistant content
   // is a list of typed chunks and reasoning_content on INPUT is rejected as
   // extra_forbidden (live-verified 2026-10-07). With no thinking to replay,
   // both styles emit the plain string content every provider accepts.
-  if (thinking.length && adapter.thinking_wire_style === 'blocks') {
+  if (thinking.length && adapter.thinking_wire_style === 'mistral') {
     // Tool-call turns cannot carry the thinking chunk: Mistral rejects
     // ThinkChunk content combined with tool_calls (HTTP 400, live-verified
     // 2026-10-07; text-only chunks + tool_calls are accepted). Fall back to
