@@ -9,6 +9,7 @@ import { type NotificationBus } from "./notifications/bus.js";
 import { type Distiller } from "./sessions/distiller.js";
 import { type Embedder } from "./sessions/embedder.js";
 import { type Recaller } from "./sessions/recaller.js";
+import { type CrontabRunner } from "./crontab/runner.js";
 import { type ContactsManager } from "./contacts/manager.js";
 import { type SpeechManager } from "./speech/manager.js";
 import { type DB } from "./database/client.js";
@@ -66,6 +67,7 @@ export interface CompleteContext {
   contacts: ContactsManager;
   speech: SpeechManager;
   recaller: Recaller;
+  crontab: CrontabRunner;
   managers: {
     tools: RootToolManager;
     models: ModelManager;

@@ -6,8 +6,10 @@ import { type ContinuityRecord } from "./tables/continuity_records.js";
 import { type SessionInjection } from "./tables/session_injections.js";
 import { type Checkpoint } from "./tables/checkpoints.js";
 import { type Contact, type ContactUrl } from "./tables/contacts.js";
+import { type CrontabRow } from "./tables/crontab.js";
 
 export interface Tables {
+  crontab: CrontabRow;
   sessions: Session;
   messages: ADBMessage;
   identity_anchors: IdentityAnchor;
