@@ -1,5 +1,5 @@
 import { OpenAISessionModel } from "../openai/openai.js";
-import { type ConfigModelOpenAI } from "../../../../config/config.js";
+import { type ConfigModelMistral } from "../../../../config/config.js";
 
 /**
  * Mistral provider adapter (2026-10-07 brainstorm, ruled in log #3997).
@@ -26,9 +26,16 @@ import { type ConfigModelOpenAI } from "../../../../config/config.js";
  * implementation stays single.
  */
 export class MistralSessionModel extends OpenAISessionModel {
-  constructor(opts: ConfigModelOpenAI) {
+  // The OpenAI adapter's constructor takes ConfigModelOpenAI; the
+  // Mistral shape is identical except adapter: 'mistral' — strip the
+  // literal before passing up.
+  constructor(opts: ConfigModelMistral) {
+    // The base constructor takes the OpenAI shape; the Mistral shape is
+    // identical except the adapter literal — strip it before passing up.
+    const { adapter: _adapter, ...openaiShape } = opts;
     super({
-      ...opts,
+      ...openaiShape,
+      adapter: 'openai',
       options: {
         ...opts.options,
         // Config may still carry these explicitly; the subclass owns the

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { MistralSessionModel } from "./mistral.js";
-import { type ConfigModelOpenAI } from "../../../../config/config.js";
+import { type ConfigModelMistral } from "../../../../config/config.js";
 
 /**
  * MistralSessionModel is a defaults-owning subclass of OpenAISessionModel:
@@ -10,12 +10,13 @@ import { type ConfigModelOpenAI } from "../../../../config/config.js";
  * root-caused live: thinking_wire_style 'mistral' and strict_wire true.
  */
 
-const baseConfig = (overrides?: Partial<ConfigModelOpenAI['options']>): ConfigModelOpenAI => ({
+const baseConfig = (overrides?: Partial<ConfigModelMistral['options']>): ConfigModelMistral => ({
   id: 'mistral/test',
   adapter: 'mistral',
   guidance: 'test',
   max_output_size: 65536,
   max_context_size: 500000,
+  timeout: 60000,
   options: {
     model: 'mistral-large-4',
     api_key: 'test-key',
