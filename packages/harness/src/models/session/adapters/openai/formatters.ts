@@ -197,6 +197,28 @@ const formatAgentInput = (message: AgentInput, adapter: OpenAISessionModel): Ope
         throw new Error(`formatAgentInput: unsupported block type '${block.type}' — upstream projection leaked a block the formatter cannot represent`);
     }
   }
+  // Thinking wire style: 'field' (default) = DeepSeek-style reasoning_content
+  // extension; 'blocks' = Mistral's documented shape, where assistant content
+  // is a list of typed chunks and reasoning_content on INPUT is rejected as
+  // extra_forbidden (live-verified 2026-10-07). With no thinking to replay,
+  // both styles emit the plain string content every provider accepts.
+  if (thinking.length && adapter.thinking_wire_style === 'blocks') {
+    const wire_content: Array<Record<string, unknown>> = [];
+    wire_content.push({
+      type: 'thinking',
+      thinking: [{ type: 'text', text: thinking.join('\n') }],
+      closed: true,
+    });
+    if (content.length) {
+      wire_content.push({ type: 'text', text: content.join(' ') });
+    }
+    return [{
+      role: 'assistant',
+      refusal: refusal.length ? refusal.join(' ') : undefined,
+      content: wire_content,
+      tool_calls: tool_calls.length ? tool_calls : undefined,
+    } as unknown as OpenAI.ChatCompletionMessageParam];
+  }
   return [{
     role: 'assistant',
     refusal: refusal.length ? refusal.join(' ') : undefined,

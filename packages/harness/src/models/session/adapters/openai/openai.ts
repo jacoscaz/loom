@@ -53,6 +53,18 @@ export class OpenAISessionModel extends AbstractSessionModel {
     return (this.#reasoning ?? 'none') as ReasoningEffort;
   }
 
+  /**
+   * How thinking blocks replay on the wire. 'field' (default) is the
+   * DeepSeek-style `reasoning_content` extension. 'blocks' is Mistral's
+   * documented shape (2026-10): assistant content is a list of typed
+   * chunks (ThinkChunk/TextChunk) — `reasoning_content` on INPUT is
+   * rejected as extra_forbidden (verified live, HTTP 422 with explicit
+   * Pydantic detail). Declared per-model via options.extras.
+   */
+  get thinking_wire_style(): 'field' | 'blocks' {
+    return this.#extras.thinking_wire_style === 'blocks' ? 'blocks' : 'field';
+  }
+
   async _query(opts: ModelQueryOpts, signal?: AbortSignal, on_activity: () => void = () => { }): Promise<ModelQueryResults> {
     try {
       // Projection runs here, in request composition: content decisions
