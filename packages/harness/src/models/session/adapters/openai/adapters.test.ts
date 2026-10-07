@@ -422,6 +422,53 @@ test('parseMessage: Mistral block content — unknown chunk types are kept loudl
   assert.equal(text.text, 'answer');
 });
 
+test('formatAgentInput: thinking_wire_style blocks — Mistral chunk-list content, no reasoning_content field', () => {
+  const turn: Message = {
+    role: 'agent',
+    type: 'input',
+    blocks: [
+      { type: 'thinking', text: 'greet back' },
+      { type: 'text', text: 'hello' },
+      { type: 'tool_req', req_id: 'r1', tool: 'ls', params: {} },
+    ],
+  } as Message;
+  const BLOCKS_ADAPTER = {
+    ...FAKE_THINKING_ADAPTER,
+    thinking_wire_style: 'blocks',
+  } as unknown as OpenAISessionModel;
+
+  const wire = formatMessages([{ role: 'user', type: 'input', blocks: [{ type: 'text', text: 'hi' }] }, turn], BLOCKS_ADAPTER);
+  const asst = wire.find(m => m.role === 'assistant') as { content: unknown; reasoning_content?: unknown; tool_calls?: unknown[] };
+  // Mistral's shape: content is a list of typed chunks, thinking first
+  const content = asst.content as Array<Record<string, unknown>>;
+  assert.ok(Array.isArray(content), 'content is a chunk list in blocks style');
+  assert.equal(content[0].type, 'thinking');
+  assert.deepEqual((content[0].thinking as Array<Record<string, unknown>>)[0].text, 'greet back');
+  assert.equal(content[1].type, 'text');
+  assert.equal(content[1].text, 'hello');
+  // The DeepSeek-style extension field must NOT appear — Mistral rejects it
+  // as extra_forbidden (HTTP 422, live-verified 2026-10-07).
+  assert.equal(asst.reasoning_content, undefined);
+  assert.ok(Array.isArray(asst.tool_calls) && asst.tool_calls.length === 1, 'tool_calls ride alongside');
+});
+
+test('formatAgentInput: thinking_wire_style blocks — no thinking falls back to plain string', () => {
+  const turn: Message = {
+    role: 'agent',
+    type: 'input',
+    blocks: [{ type: 'text', text: 'plain answer' }],
+  } as Message;
+  const BLOCKS_ADAPTER = {
+    ...FAKE_THINKING_ADAPTER,
+    thinking_wire_style: 'blocks',
+  } as unknown as OpenAISessionModel;
+
+  const wire = formatMessages([turn], BLOCKS_ADAPTER);
+  const asst = wire[0] as { role: string; content: unknown };
+  assert.equal(asst.role, 'assistant');
+  assert.equal(asst.content, 'plain answer');
+});
+
 test('parseMessage: Mistral block content — thinking-only response yields no empty text block', () => {
   const response = {
     role: 'assistant',
