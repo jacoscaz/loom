@@ -422,7 +422,7 @@ test('parseMessage: Mistral block content — unknown chunk types are kept loudl
   assert.equal(text.text, 'answer');
 });
 
-test('formatAgentInput: thinking_wire_style blocks — tool-call turns fall back to plain string content', () => {
+test('formatAgentInput: thinking_wire_style mistral — tool-call turns fall back to plain string content', () => {
   // Mistral rejects ThinkChunk content combined with tool_calls (HTTP 400,
   // live-verified 2026-10-07; text-only chunks + tool_calls ARE accepted,
   // but the plain string shape is what the tool-turn contract needs).
@@ -437,7 +437,7 @@ test('formatAgentInput: thinking_wire_style blocks — tool-call turns fall back
   } as Message;
   const BLOCKS_ADAPTER = {
     ...FAKE_THINKING_ADAPTER,
-    thinking_wire_style: 'blocks',
+    thinking_wire_style: 'mistral',
   } as unknown as OpenAISessionModel;
 
   const wire = formatMessages([{ role: 'user', type: 'input', blocks: [{ type: 'text', text: 'hi' }] }, turn], BLOCKS_ADAPTER);
@@ -447,7 +447,7 @@ test('formatAgentInput: thinking_wire_style blocks — tool-call turns fall back
   assert.ok(Array.isArray(asst.tool_calls) && asst.tool_calls.length === 1, 'tool_calls ride alongside');
 });
 
-test('formatAgentInput: thinking_wire_style blocks — thinking+text replay as Mistral chunk list', () => {
+test('formatAgentInput: thinking_wire_style mistral — thinking+text replay as Mistral chunk list', () => {
   const turn: Message = {
     role: 'agent',
     type: 'input',
@@ -458,7 +458,7 @@ test('formatAgentInput: thinking_wire_style blocks — thinking+text replay as M
   } as Message;
   const BLOCKS_ADAPTER = {
     ...FAKE_THINKING_ADAPTER,
-    thinking_wire_style: 'blocks',
+    thinking_wire_style: 'mistral',
   } as unknown as OpenAISessionModel;
 
   const wire = formatMessages([{ role: 'user', type: 'input', blocks: [{ type: 'text', text: 'hi' }] }, turn], BLOCKS_ADAPTER);
@@ -475,7 +475,7 @@ test('formatAgentInput: thinking_wire_style blocks — thinking+text replay as M
   assert.equal(asst.reasoning_content, undefined);
 });
 
-test('formatAgentInput: thinking_wire_style blocks — no thinking falls back to plain string', () => {
+test('formatAgentInput: thinking_wire_style mistral — no thinking falls back to plain string', () => {
   const turn: Message = {
     role: 'agent',
     type: 'input',
@@ -483,7 +483,7 @@ test('formatAgentInput: thinking_wire_style blocks — no thinking falls back to
   } as Message;
   const BLOCKS_ADAPTER = {
     ...FAKE_THINKING_ADAPTER,
-    thinking_wire_style: 'blocks',
+    thinking_wire_style: 'mistral',
   } as unknown as OpenAISessionModel;
 
   const wire = formatMessages([turn], BLOCKS_ADAPTER);

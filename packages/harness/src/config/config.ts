@@ -72,6 +72,22 @@ export interface ConfigModelOpenAI extends ConfigModelBase {
     api_key: string;
     base_url?: string;
     reasoning?: { effort: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'; };
+    /**
+     * How thinking blocks replay on the wire for this model. 'field'
+     * (default) is the DeepSeek-style `reasoning_content` extension;
+     * 'mistral' is Mistral's documented shape (assistant content as a
+     * list of typed chunks — ThinkChunk/TextChunk). Adapter-level
+     * semantics, so it lives at options level, NOT in extras (extras
+     * is reserved for provider-specific API passthrough).
+     */
+    thinking_wire_style?: 'field' | 'mistral';
+    /**
+     * Strict wire mode: omit unknown top-level request parameters the
+     * adapter carries for lenient providers (e.g. session_id). Providers
+     * with extra_forbidden body validation (Mistral, live-verified
+     * 2026-10-07) reject those outright.
+     */
+    strict_wire?: boolean;
     extras?: Record<string, any>;
   };
 };
