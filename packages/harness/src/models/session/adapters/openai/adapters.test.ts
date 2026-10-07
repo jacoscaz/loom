@@ -367,3 +367,71 @@ test('round trip: a native turn survives format -> parse with its grouping intac
   const replay = formatMessages(history, FAKE_THINKING_ADAPTER);
   assert.deepEqual(replay, first, 're-formatting the same history is stable');
 });
+
+// Mistral-style block content (documented deviation from the OpenAI schema,
+// docs.mistral.ai capabilities/reasoning): with reasoning on, message.content
+// is a LIST of typed chunks — ThinkChunk and TextChunk — not a string. The
+// adapter must normalize this provider-specific shape into the canonical
+// message form: thinking chunks become thinking blocks, text chunks join
+// into one text block, unknown chunk types are captured loudly.
+
+test('parseMessage: Mistral block content — thinking and text chunks normalize', () => {
+  const response = {
+    role: 'assistant',
+    content: [
+      {
+        type: 'thinking',
+        thinking: [
+          { type: 'text', text: 'The user asks 2+2. ' },
+          { type: 'text', text: 'The answer is 4.' },
+        ],
+        closed: true,
+      },
+      { type: 'text', text: '4' },
+    ],
+  } as unknown as OpenAI.ChatCompletionMessage;
+
+  const messages = parseMessage(response);
+  const input = messages.find(m => m.type === 'input') as AgentInput;
+  const thinking = input.blocks.find(b => b.type === 'thinking') as { type: string; text: string };
+  const text = input.blocks.find(b => b.type === 'text') as { type: string; text: string };
+  assert.ok(thinking, 'thinking chunk becomes a thinking block');
+  assert.equal(thinking.text, 'The user asks 2+2. \nThe answer is 4.');
+  assert.ok(text, 'text chunks concatenate into one text block');
+  assert.equal(text.text, '4');
+  // Nothing leaked as unsupported — every chunk type was understood.
+  assert.equal(input.blocks.filter(b => b.type === 'unsupported').length, 0);
+});
+
+test('parseMessage: Mistral block content — unknown chunk types are kept loudly', () => {
+  const response = {
+    role: 'assistant',
+    content: [
+      { type: 'text', text: 'answer' },
+      { type: 'mystery_chunk', payload: { x: 1 } },
+    ],
+  } as unknown as OpenAI.ChatCompletionMessage;
+
+  const messages = parseMessage(response);
+  const input = messages.find(m => m.type === 'input') as AgentInput;
+  const unsupported = input.blocks.filter(b => b.type === 'unsupported');
+  assert.equal(unsupported.length, 1);
+  assert.ok(unsupported[0].text.includes('[content chunk]'));
+  assert.ok(unsupported[0].text.includes('mystery_chunk'));
+  const text = input.blocks.find(b => b.type === 'text') as { type: string; text: string };
+  assert.equal(text.text, 'answer');
+});
+
+test('parseMessage: Mistral block content — thinking-only response yields no empty text block', () => {
+  const response = {
+    role: 'assistant',
+    content: [
+      { type: 'thinking', thinking: [{ type: 'text', text: 'still deciding' }], closed: false },
+    ],
+  } as unknown as OpenAI.ChatCompletionMessage;
+
+  const messages = parseMessage(response);
+  const input = messages.find(m => m.type === 'input') as AgentInput;
+  assert.ok(input.blocks.some(b => b.type === 'thinking' && b.text === 'still deciding'));
+  assert.equal(input.blocks.filter(b => b.type === 'text').length, 0);
+});
