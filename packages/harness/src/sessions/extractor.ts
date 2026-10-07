@@ -48,7 +48,9 @@ export const parseExtraction = (text: string): ExtractionResult | null => {
 };
 
 /** Run the extractor. Returns null on timeout, transport or parse failure —
- *  the caller falls back to raw-message querying. Never throws. */
+ *  the caller gates out silently (NO raw-message fallback: deliberate, per
+ *  the PR #42 review round — grounding remains the agent's conscious work).
+ *  Never throws. */
 export const runExtractor = async (
   model: AbstractSessionModel,
   message_text: string,
