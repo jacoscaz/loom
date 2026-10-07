@@ -76,6 +76,17 @@ export interface ConfigModelOpenAI extends ConfigModelBase {
   };
 };
 
+/**
+ * Mistral provider config (2026-10-07): same shape as the OpenAI
+ * adapter — Mistral speaks the OpenAI wire dialect — but the
+ * adapter dispatches to MistralSessionModel, a subclass that owns the
+ * two provider defaults (thinking_wire_style 'mistral', strict_wire
+ * true). See adapters/mistral/mistral.ts.
+ */
+export interface ConfigModelMistral extends Omit<ConfigModelOpenAI, 'adapter'> {
+  adapter: 'mistral';
+};
+
 export interface ConfigModelAnthropic extends ConfigModelBase {
   adapter: 'anthropic';
   options: {
@@ -93,7 +104,7 @@ export interface ConfigModelAnthropic extends ConfigModelBase {
   };
 };
 
-export type ConfigSessionModel = ConfigModelOpenAI | ConfigModelAnthropic;
+export type ConfigSessionModel = ConfigModelOpenAI | ConfigModelMistral | ConfigModelAnthropic;
 
 /**
  * Reasoning-effort vocabulary: the harness's common language for how hard
