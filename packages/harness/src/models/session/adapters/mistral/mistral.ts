@@ -1,5 +1,5 @@
 import { OpenAISessionModel } from "../openai/openai.js";
-import { type ConfigModelMistral } from "../../../../config/config.js";
+import { type ConfigModelMistral, type ConfigModelOpenAI } from "../../../../config/config.js";
 
 /**
  * Mistral provider adapter (2026-10-07 brainstorm, ruled in log #3997).
@@ -26,22 +26,21 @@ import { type ConfigModelMistral } from "../../../../config/config.js";
  * implementation stays single.
  */
 export class MistralSessionModel extends OpenAISessionModel {
-  // The OpenAI adapter's constructor takes ConfigModelOpenAI; the
-  // Mistral shape is identical except adapter: 'mistral' — strip the
-  // literal before passing up.
   constructor(opts: ConfigModelMistral) {
     // The base constructor takes the OpenAI shape; the Mistral shape is
-    // identical except the adapter literal — strip it before passing up.
-    const { adapter: _adapter, ...openaiShape } = opts;
+    // identical except the adapter literal. ConfigModelMistral carries
+    // the same typed options as ConfigModelOpenAI (thinking_wire_style,
+    // strict_wire included) — the Omit only narrows the adapter literal.
+    const openaiOpts = opts.options as ConfigModelOpenAI['options'];
     super({
-      ...openaiShape,
+      ...opts,
       adapter: 'openai',
       options: {
-        ...opts.options,
+        ...openaiOpts,
         // Config may still carry these explicitly; the subclass owns the
         // defaults so a Mistral entry needs neither key.
-        thinking_wire_style: opts.options.thinking_wire_style ?? 'mistral',
-        strict_wire: opts.options.strict_wire ?? true,
+        thinking_wire_style: openaiOpts.thinking_wire_style ?? 'mistral',
+        strict_wire: openaiOpts.strict_wire ?? true,
       },
     });
   }

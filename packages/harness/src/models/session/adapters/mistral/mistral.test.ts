@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { MistralSessionModel } from "./mistral.js";
-import { type ConfigModelMistral } from "../../../../config/config.js";
+import { type ConfigModelMistral, type ConfigModelOpenAI } from "../../../../config/config.js";
 
 /**
  * MistralSessionModel is a defaults-owning subclass of OpenAISessionModel:
@@ -10,7 +10,9 @@ import { type ConfigModelMistral } from "../../../../config/config.js";
  * root-caused live: thinking_wire_style 'mistral' and strict_wire true.
  */
 
-const baseConfig = (overrides?: Partial<ConfigModelMistral['options']>): ConfigModelMistral => ({
+// ConfigModelMistral's options type is the OpenAI options shape (the
+// Omit only narrows the adapter literal) — use it for override typing.
+const baseConfig = (overrides?: Partial<ConfigModelOpenAI['options']>): ConfigModelMistral => ({
   id: 'mistral/test',
   adapter: 'mistral',
   guidance: 'test',

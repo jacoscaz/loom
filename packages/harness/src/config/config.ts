@@ -99,8 +99,11 @@ export interface ConfigModelOpenAI extends ConfigModelBase {
  * two provider defaults (thinking_wire_style 'mistral', strict_wire
  * true). See adapters/mistral/mistral.ts.
  */
-export interface ConfigModelMistral extends Omit<ConfigModelOpenAI, 'adapter'> {
+export interface ConfigModelMistral extends Omit<ConfigModelOpenAI, 'adapter' | 'options'> {
   adapter: 'mistral';
+  // Same shape as the OpenAI adapter's options — thinking_wire_style and
+  // strict_wire included — so the subclass can own their defaults.
+  options: ConfigModelOpenAI['options'];
 };
 
 export interface ConfigModelAnthropic extends ConfigModelBase {
