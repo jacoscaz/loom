@@ -1,10 +1,10 @@
 
-import { is } from "@runtyped/type";
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { Block, DataBlock } from "../blocks/index.js";
 import { ToolCallBlock, ToolDeclBlock, ToolRespBlock } from "../blocks/tools.js";
 import { nonSafeRandom, Deferred } from "@loom/utils";
 import { EnvelopeBlock } from "../blocks/envelopes.js";
+import { encodeBlock, readBlocks } from "../framing.js";
 
 
 export interface ProcessOpts {
@@ -21,17 +21,17 @@ export class Process {
 
   #opts: ProcessOpts;
   #child?: ChildProcessWithoutNullStreams;
-  #stdout: string[];
-  #stderr: string[];
+  #detachStdout?: () => void;
   #tool_calls: Map<string, { block: ToolCallBlock, deferred: Deferred<DataBlock[]> }>;
   #tool_decls: Map<string, ToolDeclBlock>;
+  #stopped: boolean;
+  #restart_timer?: NodeJS.Timeout;
 
   constructor(opts: ProcessOpts) {
     this.#opts = opts;
-    this.#stdout = [];
-    this.#stderr = [];
     this.#tool_calls = new Map();
     this.#tool_decls = new Map();
+    this.#stopped = true;
   }
 
   get name(): string {
@@ -60,13 +60,14 @@ export class Process {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.#child.on('exit', this.#onExit);
-    this.#child.stdout.on('data', this.#onStdoutData);
+    this.#detachStdout = readBlocks(this.#child.stdout, this.#onStdoutBlock);
     this.#child.stderr.on('data', this.#onStderrData);
   };
 
   #onExit = (code: number | null, signal: string | null) => {
     this.#child?.removeListener('exit', this.#onExit);
-    this.#child?.stdout.removeListener('data', this.#onStdoutData);
+    this.#detachStdout?.();
+    this.#detachStdout = undefined;
     this.#child?.stderr.removeListener('data', this.#onStderrData);
     this.#child = undefined;
     const tool_calls = Array.from(this.#tool_calls.values());
@@ -75,35 +76,33 @@ export class Process {
       deferred.reject(new Error('process exited'));
     });
     this.#opts.onProcessExit(code, signal, this);
-    setTimeout(this.#start, 5_000);
-  };
-
-  #onStdoutData = (data: Buffer) => {
-    const str = data.toString();
-    const idx = str.indexOf('\n');
-    if (idx !== -1) {
-      const raw = this.#stdout.join('') + str.slice(0, idx);
-      try {
-        const maybe_block = JSON.parse(raw);
-        if (is<Block>(maybe_block)) {
-          this.#child?.stdout.pause();
-          this.#onStdoutBlock(maybe_block).catch(() => { }).finally(() => {
-            this.#child?.stdout.resume();
-          });
-        } else {
-          // TODO: discard block
-        }
-      } catch (err) {
-        // TODO: discard block
-      }
-      this.#stdout = [str.slice(idx + 1)];
-    } else {
-      if (this.#stdout.length > 1000) {
-        this.#stdout.shift();
-      }
-      this.#stdout.push(str);
+    if (!this.#stopped) {
+      this.#restart_timer = setTimeout(this.#start, 5_000);
     }
   };
+
+  start() {
+    this.#stopped = false;
+    this.#start();
+  }
+
+  /**
+   * Kills the child process (if running) and disables automatic restarts.
+   * Resolves once the child has exited.
+   */
+  async stop(): Promise<void> {
+    this.#stopped = true;
+    clearTimeout(this.#restart_timer);
+    const child = this.#child;
+    if (!child || !this.running) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      child.once('exit', () => resolve());
+      child.kill();
+    });
+  }
+
 
   #onStderrData = (data: Buffer) => {
     process.stderr.write(data);
@@ -127,7 +126,7 @@ export class Process {
 
   #onToolDeclBlock = async (block: ToolDeclBlock) => {
     this.#tool_decls.set(block.name, block);
-    this.#opts.onToolDeclBlock(block, this);
+    return this.#opts.onToolDeclBlock(block, this);
   };
 
   #onToolRespBlock = async (block: ToolRespBlock) => {
@@ -152,11 +151,13 @@ export class Process {
       params,
     };
     const deferred = new Deferred<DataBlock[]>();
+    // The derived promise must be handled, otherwise rejections surface as
+    // unhandled even when the caller awaits `deferred.promise`.
     deferred.promise.finally(() => {
       this.#tool_calls.delete(call_id);
-    });
+    }).catch(() => { });
     this.#tool_calls.set(call_id, { block, deferred });
-    this.#child.stdin.write(JSON.stringify(block) + '\n');
+    this.#child.stdin.write(encodeBlock(block));
     return deferred.promise;
   };
 

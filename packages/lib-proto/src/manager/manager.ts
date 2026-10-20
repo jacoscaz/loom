@@ -24,7 +24,10 @@ export class ProcessManager {
 
   #onToolDeclBlock = async (block: ToolDeclBlock, process: Process) => {
     const name = `${process.name}_${block.name}`;
-    if (this.#tools.has(name)) {
+    // Re-declarations from the same process (e.g. after a restart) replace
+    // the previous declaration.
+    const existing = this.#tools.get(name);
+    if (existing && existing.process !== process) {
       throw new Error(`tool ${name} already exists`);
     }
     this.#tools.set(name, { process, decl: block });
@@ -47,6 +50,11 @@ export class ProcessManager {
       onEnvelopeBlock: this.#onEnvelopeBlock,
     });
     this.#processes.set(name, process);
+    process.start();
+  }
+
+  async stop(): Promise<void> {
+    await Promise.all(Array.from(this.#processes.values()).map(p => p.stop()));
   }
 
   listTools(): ToolDeclBlock[] {

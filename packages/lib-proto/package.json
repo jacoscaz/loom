@@ -7,7 +7,7 @@
     "ts:clear": "rm -rf ./dist",
     "ts:build": "tsc",
     "ts:watch": "tsc --watch",
-    "test": "node --enable-source-maps --test dist/*.test.js",
+    "test": "node --enable-source-maps --test 'dist/**/*.test.js'",
     "build": "npm run ts:clear && npm run ts:build",
     "watch": "npm run ts:clear && npm run ts:watch",
     "start": "node dist/server.js"

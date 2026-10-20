@@ -2,6 +2,7 @@ import { is, ReceiveType, resolveReceiveType, toJsonSchema } from "@runtyped/typ
 import { DataBlock } from "../blocks/data.js";
 import { Block, EnvelopeBlock, ToolCallBlock, ToolDeclBlock, ToolRespBlock } from "../blocks/index.js";
 import pinetto, { type Logger } from "pinetto";
+import { encodeBlock, readBlocks } from "../framing.js";
 
 let singleton: ProcessIO | undefined;
 
@@ -12,7 +13,6 @@ interface ProcessIOOpts {
 export class ProcessIO {
 
   #opts: ProcessIOOpts;
-  #stdin: string[];
   #tools: Map<string, { decl: ToolDeclBlock, handler: (params: any) => Promise<DataBlock[]> }>;
 
   logger: Logger;
@@ -23,41 +23,14 @@ export class ProcessIO {
     }
     this.#opts = opts;
     singleton = this;
-    this.#stdin = [];
     this.#tools = new Map();
-    process.stdin.on('data', this.#onStdinData);
+    readBlocks(process.stdin, this.#onStdinBlock);
     this.logger = pinetto({
       prefix: `process:${opts.name}`,
       writer: process.stderr,
     });
   }
 
-  #onStdinData = (data: Buffer) => {
-    const str = data.toString();
-    const idx = str.indexOf('\n');
-    if (idx !== -1) {
-      const raw = this.#stdin.join('') + str.slice(0, idx);
-      try {
-        const maybe_block = JSON.parse(raw);
-        if (is<Block>(maybe_block)) {
-          process.stdin.pause();
-          this.#onStdinBlock(maybe_block).catch(() => { }).finally(() => {
-            process.stdin.resume();
-          });
-        } else {
-          // TODO: discard block
-        }
-      } catch (err) {
-        // TODO: discard block
-      }
-      this.#stdin = [str.slice(idx + 1)];
-    } else {
-      if (this.#stdin.length > 1000) {
-        this.#stdin.shift();
-      }
-      this.#stdin.push(str);
-    }
-  };
 
   registerTool<T>(name: string, description: string, handler: (params: T) => Promise<DataBlock[]>, __type_T?: ReceiveType<T>) {
     __type_T = resolveReceiveType(__type_T);
@@ -68,7 +41,9 @@ export class ProcessIO {
       }
       throw new Error('Invalid params');
     };
-    this.#tools.set(name, { decl: { type: 'tool_decl', name, description, params_schema }, handler: __handler });
+    const decl: ToolDeclBlock = { type: 'tool_decl', name, description, params_schema };
+    this.#tools.set(name, { decl, handler: __handler });
+    this.#sendBlock(decl);
   }
 
   #onStdinBlock = async (block: Block): Promise<void> => {
@@ -108,8 +83,8 @@ export class ProcessIO {
     });
   };
 
-  #sendBlock(block: EnvelopeBlock | ToolRespBlock) {
-    process.stdout.write(JSON.stringify(block) + '\n');
+  #sendBlock(block: EnvelopeBlock | ToolDeclBlock | ToolRespBlock) {
+    process.stdout.write(encodeBlock(block));
   }
 
   sendEnvelope(envelope: EnvelopeBlock) {

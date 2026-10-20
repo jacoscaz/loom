@@ -32,3 +32,15 @@ export interface AudioBlock extends BaseDataBlock<Buffer> {
 }
 
 export type DataBlock = TextBlock | ImageBlock | AudioBlock;
+
+export const isTextBlock = (block: DataBlock): block is TextBlock => {
+  return block.mime === 'text/plain';
+};
+
+export const isImageBlock = (block: DataBlock): block is ImageBlock => {
+  return block.mime.startsWith('image/');
+};
+
+export const isAudioBlock = (block: DataBlock): block is AudioBlock => {
+  return block.mime.startsWith('audio/');
+};
