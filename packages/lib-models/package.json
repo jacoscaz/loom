@@ -1,0 +1,23 @@
+{
+  "name": "@loom/lib-models",
+  "main": "dist/index.js",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "ts:clean": "rm -rf ./dist && rm -f ./tsconfig.tsbuildinfo",
+    "ts:build": "npm run ts:clean && tsc",
+    "ts:watch": "npm run ts:clean && tsc --watch",
+    "build": "npm run ts:build",
+    "test": "node --enable-source-maps --test 'dist/**/*.test.js'"
+  },
+  "devDependencies": {
+    "@runtyped/typescript": "^2.0.0",
+    "@types/node": "^26.0.1"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.127.0",
+    "@loom/proto": "0.0.1",
+    "@loom/utils": "0.0.1",
+    "openai": "^6.45.0"
+  }
+}

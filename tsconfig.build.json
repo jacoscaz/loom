@@ -4,10 +4,12 @@
     { "path": "packages/harness" },
     { "path": "packages/lib-utils" },
     { "path": "packages/lib-proto" },
+    { "path": "packages/lib-models" },
   ],
   "include": [
     "packages/harness/src/**/*.ts",
     "packages/lib-utils/src/**/*.ts",
     "packages/lib-proto/src/**/*.ts",
+    "packages/lib-models/src/**/*.ts",
   ]
 }
