@@ -1,7 +1,8 @@
 {
   "workspaces": [
     "packages/harness",
-    "packages/lib-utils"
+    "packages/lib-utils",
+    "packages/lib-proto"
   ],
   "devDependencies": {
     "@runtyped/typescript": "2.0.0",

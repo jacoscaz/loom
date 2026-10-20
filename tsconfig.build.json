@@ -3,9 +3,11 @@
   "references": [
     { "path": "packages/harness" },
     { "path": "packages/lib-utils" },
+    { "path": "packages/lib-proto" },
   ],
   "include": [
     "packages/harness/src/**/*.ts",
     "packages/lib-utils/src/**/*.ts",
+    "packages/lib-proto/src/**/*.ts",
   ]
 }
