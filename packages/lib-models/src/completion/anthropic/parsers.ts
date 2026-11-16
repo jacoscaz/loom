@@ -7,10 +7,13 @@ import { textBlock, unsupportedBlock } from "../shared.js";
  * the response's grouping — text/thinking blocks plus one tool_call block
  * per tool_use.
  *
+ * Tool calls are attributed to `session`, the session the query was made
+ * on behalf of.
+ *
  * Thinking blocks keep their signature (`anthropic_signature`) so the
  * formatter can replay them when replay_thinking is enabled.
  */
-export const parseMessage = (message: Anthropic.Message): Message[] => {
+export const parseMessage = (message: Anthropic.Message, session: string): Message[] => {
   const blocks: Block[] = [];
   for (const block of message.content ?? []) {
     switch (block.type) {
@@ -31,6 +34,7 @@ export const parseMessage = (message: Anthropic.Message): Message[] => {
           call_id: block.id,
           tool: block.name,
           params: block.input as Record<string, unknown>,
+          session,
         });
         break;
       default:

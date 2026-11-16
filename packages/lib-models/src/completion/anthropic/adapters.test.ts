@@ -14,6 +14,8 @@ import { formatMessages, type AnthropicFormatOpts } from "./formatters.js";
  * - the rolling cache breakpoint lands on the conversation tail.
  */
 
+const SESSION = 'test-session';
+
 const text = (data: string): TextBlock => ({ type: 'data', mime: 'text/plain', data });
 
 const CACHED: AnthropicFormatOpts = { prompt_cache_ttl: '1h' };
@@ -45,14 +47,14 @@ test('parseMessage: text and tool_use blocks become ONE agent message', () => {
     { type: 'text', text: 'Checking now.' },
     { type: 'tool_use', id: 'toolu_1', name: 'shell_exec', input: { command: 'ls' } },
     { type: 'tool_use', id: 'toolu_2', name: 'file_read', input: { path: '/a' } },
-  ]));
+  ]), SESSION);
   assert.equal(messages.length, 1);
   assert.deepStrictEqual(messages[0], {
     role: 'agent',
     blocks: [
       text('Checking now.'),
-      { type: 'tool_call', call_id: 'toolu_1', tool: 'shell_exec', params: { command: 'ls' } },
-      { type: 'tool_call', call_id: 'toolu_2', tool: 'file_read', params: { path: '/a' } },
+      { type: 'tool_call', session: SESSION, call_id: 'toolu_1', tool: 'shell_exec', params: { command: 'ls' } },
+      { type: 'tool_call', session: SESSION, call_id: 'toolu_2', tool: 'file_read', params: { path: '/a' } },
     ],
   });
 });
@@ -62,7 +64,7 @@ test('parseMessage: thinking keeps its signature, redacted thinking keeps its pl
     { type: 'thinking', thinking: 'private reasoning', signature: 'sig-abc' },
     { type: 'redacted_thinking', data: 'encrypted' },
     { type: 'text', text: 'answer' },
-  ]));
+  ]), SESSION);
   assert.deepStrictEqual(messages[0]!.blocks, [
     { type: 'thinking', text: 'private reasoning', anthropic_signature: 'sig-abc' },
     { type: 'thinking_redacted', text: '' },
@@ -74,13 +76,13 @@ test('parseMessage: server-side blocks are captured loudly, not dropped', () => 
   const messages = parseMessage(asResponse([
     { type: 'text', text: 'ok' },
     { type: 'server_tool_use', id: 'srv_1', name: 'web_search', input: {} },
-  ]));
+  ]), SESSION);
   const unsupported = (messages[0]!.blocks[1] as TextBlock).data!;
   assert.ok(unsupported.startsWith('[unsupported] [content block: server_tool_use]'), unsupported);
 });
 
 test('parseMessage: empty text blocks are skipped, an empty response yields no message', () => {
-  assert.deepStrictEqual(parseMessage(asResponse([{ type: 'text', text: '' }])), []);
+  assert.deepStrictEqual(parseMessage(asResponse([{ type: 'text', text: '' }]), SESSION), []);
 });
 
 // ------------------------------------------------------------- formatters
@@ -93,7 +95,7 @@ test('formatMessages: a native turn projects as ONE assistant message', () => {
       blocks: [
         text('Running.'),
         { type: 'thinking', text: 'stripped: not kept by projection' },
-        { type: 'tool_call', call_id: 'toolu_9', tool: 'shell_exec', params: { command: 'ls' } },
+        { type: 'tool_call', session: SESSION, call_id: 'toolu_9', tool: 'shell_exec', params: { command: 'ls' } },
       ],
     },
   ]);
@@ -109,10 +111,10 @@ test('formatMessages: a native turn projects as ONE assistant message', () => {
 
 test('formatMessages: consecutive same-role messages merge, preserving block order', () => {
   const wire = format([
-    { role: 'user', blocks: [{ type: 'envelope', kind: 'message', from: 'telegram:42', blocks: [text('hello')] }] },
+    { role: 'user', blocks: [{ type: 'envelope', session: SESSION, kind: 'message', from: 'telegram:42', blocks: [text('hello')] }] },
     { role: 'user', blocks: [text('there')] },
     { role: 'agent', blocks: [text('Running.')] },
-    { role: 'agent', blocks: [{ type: 'tool_call', call_id: 't', tool: 'x', params: {} }] },
+    { role: 'agent', blocks: [{ type: 'tool_call', session: SESSION, call_id: 't', tool: 'x', params: {} }] },
   ]);
   assert.equal(wire.length, 2);
   assert.deepStrictEqual(wire[0]!.content.map(b => b.text), ['[message from telegram:42]', 'hello', 'there']);
@@ -121,8 +123,8 @@ test('formatMessages: consecutive same-role messages merge, preserving block ord
 
 test('formatMessages: tool responses become tool_result blocks, ordered first', () => {
   const wire = format([
-    { role: 'agent', blocks: [{ type: 'tool_call', call_id: 'toolu_5', tool: 'shell_exec', params: {} }] },
-    { role: 'user', blocks: [text('meanwhile'), { type: 'tool_resp', call_id: 'toolu_5', response: [text('file-a')] }] },
+    { role: 'agent', blocks: [{ type: 'tool_call', session: SESSION, call_id: 'toolu_5', tool: 'shell_exec', params: {} }] },
+    { role: 'user', blocks: [text('meanwhile'), { type: 'tool_resp', session: SESSION, call_id: 'toolu_5', response: [text('file-a')] }] },
   ]);
   assert.deepStrictEqual(wire[1]!.content, [
     { type: 'tool_result', tool_use_id: 'toolu_5', content: [{ type: 'text', text: 'file-a' }] },
@@ -133,8 +135,8 @@ test('formatMessages: tool responses become tool_result blocks, ordered first', 
 test('formatMessages: the rolling cache breakpoint lands on the tail, even a tool_result', () => {
   const wire = format([
     { role: 'user', blocks: [text('go')] },
-    { role: 'agent', blocks: [{ type: 'tool_call', call_id: 'toolu_5', tool: 'shell_exec', params: {} }] },
-    { role: 'user', blocks: [{ type: 'tool_resp', call_id: 'toolu_5', response: [text('out')] }] },
+    { role: 'agent', blocks: [{ type: 'tool_call', session: SESSION, call_id: 'toolu_5', tool: 'shell_exec', params: {} }] },
+    { role: 'user', blocks: [{ type: 'tool_resp', session: SESSION, call_id: 'toolu_5', response: [text('out')] }] },
   ], PROJECTION, CACHED);
   const all = wire.flatMap(m => m.content);
   assert.equal(all.filter(b => b.cache_control).length, 1, 'exactly one breakpoint in the conversation');

@@ -27,6 +27,8 @@ import {
  * silent content loss downstream.
  */
 
+const SESSION = 'test-session';
+
 const text = (data: string): TextBlock => ({ type: 'data', mime: 'text/plain', data });
 
 const IMAGE_BYTES = 'IMGBYTES';
@@ -41,13 +43,13 @@ const FIXTURE_WEAVE: Message[] = [
     blocks: [
       { type: 'thinking', text: 'I should list the directory.' },
       text('Checking /tmp now.'),
-      { type: 'tool_call', call_id: 'call-1', tool: 'shell_exec', params: { command: 'ls /tmp' } },
+      { type: 'tool_call', session: SESSION, call_id: 'call-1', tool: 'shell_exec', params: { command: 'ls /tmp' } },
     ],
   },
   {
     role: 'user',
     blocks: [{
-      type: 'tool_resp',
+      type: 'tool_resp', session: SESSION,
       call_id: 'call-1',
       response: [
         text('a.txt\nb.txt'),
@@ -65,7 +67,7 @@ const FIXTURE_WEAVE: Message[] = [
   {
     role: 'user',
     blocks: [{
-      type: 'envelope',
+      type: 'envelope', session: SESSION,
       kind: 'message',
       from: 'telegram:42',
       blocks: [text('ping')],
@@ -134,7 +136,7 @@ test('serializeMessage: tool responses fall back to the call_id without a tool n
 });
 
 test('serializeMessage: empty tool responses are marked', () => {
-  const message: Message = { role: 'user', blocks: [{ type: 'tool_resp', call_id: 'c', response: [] }] };
+  const message: Message = { role: 'user', blocks: [{ type: 'tool_resp', session: SESSION, call_id: 'c', response: [] }] };
   assert.ok(serializeMessage(message, SERIALIZE_COMPACTION_OPTS).includes('(empty result)'));
 });
 
@@ -257,8 +259,8 @@ test('audio window: beyond audio_window, older audio converts to its transcripti
   // envelopes, in tool responses.
   const messages: Message[] = [
     { role: 'user', blocks: [audio(1)] },
-    { role: 'user', blocks: [{ type: 'envelope', kind: 'message', from: 'telegram:42', blocks: [audio(2)] }] },
-    { role: 'user', blocks: [{ type: 'tool_resp', call_id: 'c', response: [audio(3)] }] },
+    { role: 'user', blocks: [{ type: 'envelope', session: SESSION, kind: 'message', from: 'telegram:42', blocks: [audio(2)] }] },
+    { role: 'user', blocks: [{ type: 'tool_resp', session: SESSION, call_id: 'c', response: [audio(3)] }] },
   ];
   const opts = { ...PROJECT_DISTILLATION_OPTS, exclude_tool_traffic: false, audio_policy: 'keep' as const, audio_window: 2 };
 
@@ -284,7 +286,7 @@ test('projectMessage: exclude_tool_traffic strips tool_call blocks but keeps the
     role: 'agent',
     blocks: [
       text('calling now'),
-      { type: 'tool_call', call_id: 'r1', tool: 'shell_exec', params: { command: 'ls' } },
+      { type: 'tool_call', session: SESSION, call_id: 'r1', tool: 'shell_exec', params: { command: 'ls' } },
     ],
   };
   assert.deepStrictEqual(projectMessage(turn, PROJECT_DISTILLATION_OPTS)?.blocks.map(b => b.type), ['data']);

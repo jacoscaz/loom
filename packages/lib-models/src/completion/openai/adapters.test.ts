@@ -11,6 +11,8 @@ import { findTextualToolCallNames } from "../shared.js";
  * from the harness adapter tests to the lib-proto block model.
  */
 
+const SESSION = 'test-session';
+
 const text = (data: string): TextBlock => ({ type: 'data', mime: 'text/plain', data });
 
 const FIELD: OpenAIFormatOpts = { thinking_wire_style: 'field' };
@@ -45,14 +47,14 @@ test('parseMessage: content, reasoning and tool_calls become ONE agent message',
       { id: 'call_1', type: 'function', function: { name: 'shell_exec', arguments: '{"command":"ls"}' } },
       { id: 'call_2', type: 'function', function: { name: 'file_read', arguments: '{"path":"/a"}' } },
     ],
-  }));
+  }), SESSION);
   assert.equal(messages.length, 1);
   assert.equal(messages[0]!.role, 'agent');
   assert.deepStrictEqual(messages[0]!.blocks, [
     text('Checking now.'),
     { type: 'thinking', text: 'I should list it.' },
-    { type: 'tool_call', call_id: 'call_1', tool: 'shell_exec', params: { command: 'ls' } },
-    { type: 'tool_call', call_id: 'call_2', tool: 'file_read', params: { path: '/a' } },
+    { type: 'tool_call', session: SESSION, call_id: 'call_1', tool: 'shell_exec', params: { command: 'ls' } },
+    { type: 'tool_call', session: SESSION, call_id: 'call_2', tool: 'file_read', params: { path: '/a' } },
   ]);
 });
 
@@ -60,12 +62,12 @@ test('parseMessage: invalid tool call arguments degrade to empty params', () => 
   const messages = parseMessage(asResponse({
     content: null,
     tool_calls: [{ id: 'c', type: 'function', function: { name: 'x', arguments: '{}""' } }],
-  }));
-  assert.deepStrictEqual(messages[0]!.blocks, [{ type: 'tool_call', call_id: 'c', tool: 'x', params: {} }]);
+  }), SESSION);
+  assert.deepStrictEqual(messages[0]!.blocks, [{ type: 'tool_call', session: SESSION, call_id: 'c', tool: 'x', params: {} }]);
 });
 
 test('parseMessage: refusals become refusal blocks', () => {
-  const messages = parseMessage(asResponse({ content: null, refusal: 'I cannot help with that.' }));
+  const messages = parseMessage(asResponse({ content: null, refusal: 'I cannot help with that.' }), SESSION);
   assert.deepStrictEqual(messages[0]!.blocks, [{ type: 'refusal', reason: 'I cannot help with that.' }]);
 });
 
@@ -74,14 +76,14 @@ test('parseMessage: annotations and legacy function_call are captured loudly', (
     content: 'see the link',
     annotations: [{ type: 'url_citation', url: 'https://x' }],
     function_call: { name: 'legacy', arguments: '{}' },
-  }));
+  }), SESSION);
   const texts = messages[0]!.blocks.map(b => (b as TextBlock).data);
   assert.ok(texts.some(t => t?.startsWith('[unsupported] [annotations]')));
   assert.ok(texts.some(t => t?.startsWith('[unsupported] [legacy function_call]')));
 });
 
 test('parseMessage: an empty response yields no message', () => {
-  assert.deepStrictEqual(parseMessage(asResponse({ content: null })), []);
+  assert.deepStrictEqual(parseMessage(asResponse({ content: null }), SESSION), []);
 });
 
 test('parseMessage: Mistral block content — thinking and text chunks normalize', () => {
@@ -92,7 +94,7 @@ test('parseMessage: Mistral block content — thinking and text chunks normalize
       { type: 'text', text: 'answer' },
       { type: 'hologram', payload: { x: 1 } },
     ],
-  }));
+  }), SESSION);
   const blocks = messages[0]!.blocks;
   assert.deepStrictEqual(blocks[0], { type: 'thinking', text: 'step one\nstep two' });
   assert.ok((blocks[1] as TextBlock).data!.startsWith('[unsupported] [content chunk]'));
@@ -107,7 +109,7 @@ test('formatMessages: a native turn projects as ONE assistant message', () => {
     blocks: [
       { type: 'thinking', text: 'the reasoning' },
       text('calling now'),
-      { type: 'tool_call', call_id: 'r1', tool: 'shell_exec', params: { command: 'ls' } },
+      { type: 'tool_call', session: SESSION, call_id: 'r1', tool: 'shell_exec', params: { command: 'ls' } },
     ],
   }], FIELD);
   assert.equal(wire.length, 1);
@@ -123,7 +125,7 @@ test('formatMessages: a native turn projects as ONE assistant message', () => {
 test('formatMessages: a split turn (text, then bare tool calls) folds into one assistant message', () => {
   const wire = formatMessages([
     { role: 'agent', blocks: [text('calling now')] },
-    { role: 'agent', blocks: [{ type: 'tool_call', call_id: 'r1', tool: 'shell_exec', params: {} }] },
+    { role: 'agent', blocks: [{ type: 'tool_call', session: SESSION, call_id: 'r1', tool: 'shell_exec', params: {} }] },
   ], FIELD);
   assert.equal(wire.length, 1);
   assert.equal((wire[0] as WireAssistant).tool_calls?.length, 1);
@@ -131,12 +133,12 @@ test('formatMessages: a split turn (text, then bare tool calls) folds into one a
 
 test('formatMessages: tool responses become tool messages, ahead of plain user content', () => {
   const wire = formatMessages([
-    { role: 'agent', blocks: [{ type: 'tool_call', call_id: 'r1', tool: 'shell_exec', params: {} }] },
+    { role: 'agent', blocks: [{ type: 'tool_call', session: SESSION, call_id: 'r1', tool: 'shell_exec', params: {} }] },
     {
       role: 'user',
       blocks: [
         text('also, hello'),
-        { type: 'tool_resp', call_id: 'r1', response: [text('done')] },
+        { type: 'tool_resp', session: SESSION, call_id: 'r1', response: [text('done')] },
       ],
     },
   ], FIELD);
@@ -148,7 +150,7 @@ test('formatMessages: tool responses become tool messages, ahead of plain user c
 test('formatMessages: envelopes render their provenance before their content', () => {
   const wire = formatMessages([{
     role: 'user',
-    blocks: [{ type: 'envelope', kind: 'message', from: 'telegram:42', blocks: [text('ping')] }],
+    blocks: [{ type: 'envelope', session: SESSION, kind: 'message', from: 'telegram:42', blocks: [text('ping')] }],
   }], FIELD);
   assert.deepStrictEqual((wire[0] as OpenAI.ChatCompletionUserMessageParam).content, [
     { type: 'text', text: '[message from telegram:42]' },
@@ -240,7 +242,7 @@ test('thinking_wire_style blocks: tool-call turns fall back to plain string cont
     blocks: [
       { type: 'thinking', text: 'deep thought' },
       text('calling'),
-      { type: 'tool_call', call_id: 'r1', tool: 'x', params: {} },
+      { type: 'tool_call', session: SESSION, call_id: 'r1', tool: 'x', params: {} },
     ],
   }], BLOCKS);
   const assistant = wire[0] as WireAssistant;
@@ -253,10 +255,10 @@ test('round trip: a native turn survives parse -> project -> format with its gro
     content: 'Running.',
     reasoning_content: 'plan',
     tool_calls: [{ id: 'call_9', type: 'function', function: { name: 'shell_exec', arguments: '{"command":"ls"}' } }],
-  }));
+  }), SESSION);
   const history: Message[] = [
     turn!,
-    { role: 'user', blocks: [{ type: 'tool_resp', call_id: 'call_9', response: [text('a.txt')] }] },
+    { role: 'user', blocks: [{ type: 'tool_resp', session: SESSION, call_id: 'call_9', response: [text('a.txt')] }] },
   ];
   const wire = formatMessages(projectMessages(history, { ...PROJECTION, exclude_thinking: false }), FIELD);
   assert.deepStrictEqual(wire.map(m => m.role), ['assistant', 'tool']);

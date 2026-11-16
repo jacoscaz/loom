@@ -175,7 +175,7 @@ describe("completion models over the wire", () => {
       blocks: [
         text('Listing now.'),
         { type: 'thinking', text: 'plan' },
-        { type: 'tool_call', call_id: 'call_1', tool: 'shell_exec', params: { command: 'ls /tmp' } },
+        { type: 'tool_call', session: 'session-1', call_id: 'call_1', tool: 'shell_exec', params: { command: 'ls /tmp' } },
       ],
     }]);
     assert.deepStrictEqual(
@@ -234,7 +234,7 @@ describe("completion models over the wire", () => {
       role: 'agent',
       blocks: [
         text('Listing now.'),
-        { type: 'tool_call', call_id: 'toolu_1', tool: 'shell_exec', params: { command: 'ls /tmp' } },
+        { type: 'tool_call', session: 'session-1', call_id: 'toolu_1', tool: 'shell_exec', params: { command: 'ls /tmp' } },
       ],
     }]);
     assert.deepStrictEqual(

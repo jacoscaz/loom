@@ -132,7 +132,7 @@ export class OpenAICompletionModel extends AbstractCompletionModel {
         signal,
       });
       const [response, usage] = await this.#consumeStream(stream, on_activity);
-      const parsed_messages = parseMessage(response);
+      const parsed_messages = parseMessage(response, opts.session_id ?? '');
       // Loud, registry-bounded detection of tool calls the model emitted as
       // text instead of natively. A warning only — never an action.
       warnOnTextualToolCalls(parsed_messages, opts.tools.map((t) => t.name), `${this.provider}-model ${this.model}`);

@@ -37,7 +37,7 @@ const parseFunctionCallArgs = (call: OpenAI.ChatCompletionMessageFunctionToolCal
  * continuity purposes; whether it is replayed to the provider is decided
  * by the model's projection (replay_thinking).
  */
-export const parseMessage = (message: OpenAI.ChatCompletionMessage): Message[] => {
+export const parseMessage = (message: OpenAI.ChatCompletionMessage, session: string): Message[] => {
   const blocks: Block[] = [];
   // Standard OpenAI responses carry content as a string. Mistral's reasoning
   // models (documented deviation, docs.mistral.ai capabilities/reasoning)
@@ -85,6 +85,7 @@ export const parseMessage = (message: OpenAI.ChatCompletionMessage): Message[] =
           call_id: call.id,
           tool: call.function.name,
           params: parseFunctionCallArgs(call),
+          session,
         });
       } else {
         blocks.push(unsupportedBlock(`tool call: ${call.type}`, call));

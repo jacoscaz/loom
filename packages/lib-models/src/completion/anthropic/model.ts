@@ -99,7 +99,7 @@ export class AnthropicCompletionModel extends AbstractCompletionModel {
       // Every received event re-arms the stall timeout.
       stream.on('streamEvent', () => on_activity());
       const response = await stream.finalMessage();
-      const parsed_messages = parseMessage(response);
+      const parsed_messages = parseMessage(response, opts.session_id ?? '');
       warnOnTextualToolCalls(parsed_messages, opts.tools.map((t) => t.name), `anthropic-model ${this.model}`);
       const usage = response.usage;
       // Anthropic reports cache reads/writes separately from uncached
