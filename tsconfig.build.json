@@ -6,6 +6,7 @@
     { "path": "packages/lib-proto" },
     { "path": "packages/lib-tools" },
     { "path": "packages/lib-models" },
+    { "path": "packages/tool-telegram" },
   ],
   "include": [
     // "packages/harness/src/**/*.ts",
@@ -13,5 +14,6 @@
     "packages/lib-proto/src/**/*.ts",
     "packages/lib-tools/src/**/*.ts",
     "packages/lib-models/src/**/*.ts",
+    "packages/tool-telegram/src/**/*.ts",
   ]
 }

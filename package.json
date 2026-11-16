@@ -1,9 +1,10 @@
 {
   "workspaces": [
-    "packages/harness",
     "packages/lib-utils",
     "packages/lib-proto",
-    "packages/lib-models"
+    "packages/lib-tools",
+    "packages/lib-models",
+    "packages/tool-telegram"
   ],
   "devDependencies": {
     "@runtyped/typescript": "2.0.0",
