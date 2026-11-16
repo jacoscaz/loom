@@ -7,6 +7,7 @@ export interface BaseEnvelopeBlock<T extends Block> extends BaseBlock {
   type: 'envelope';
   kind: string;
   blocks: T[];
+  session: string;
 }
 
 export interface MessageEnvelopeBlock extends BaseEnvelopeBlock<DataBlock> {

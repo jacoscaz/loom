@@ -1,15 +1,17 @@
 {
   "extends": "./tsconfig.base.json",
   "references": [
-    { "path": "packages/harness" },
+    // { "path": "packages/harness" },
     { "path": "packages/lib-utils" },
     { "path": "packages/lib-proto" },
+    { "path": "packages/lib-tools" },
     { "path": "packages/lib-models" },
   ],
   "include": [
-    "packages/harness/src/**/*.ts",
+    // "packages/harness/src/**/*.ts",
     "packages/lib-utils/src/**/*.ts",
     "packages/lib-proto/src/**/*.ts",
+    "packages/lib-tools/src/**/*.ts",
     "packages/lib-models/src/**/*.ts",
   ]
 }

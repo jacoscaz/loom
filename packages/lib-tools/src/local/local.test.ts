@@ -4,12 +4,15 @@ import type { EnvelopeBlock, TextBlock } from "@loom/proto";
 import { LocalToolServer } from "./server.js";
 import { LocalToolClient } from "./client.js";
 
+const SESSION = 'test-session';
+
 const text = (data: string): TextBlock => ({ type: 'data', mime: 'text/plain', data });
 
 const envelope = (data: string): EnvelopeBlock => ({
   type: 'envelope',
   kind: 'message',
   from: 'test:sender',
+  session: SESSION,
   blocks: [text(data)],
 });
 
@@ -65,33 +68,40 @@ describe("LocalToolServer", () => {
     const server = new LocalToolServer('local');
     server.addTool<{}>('t', 'first', () => [text('first')]);
     server.addTool<{}>('t', 'second', () => [text('second')]);
-    assert.deepStrictEqual(await server.callTool('t', {}), [text('second')]);
+    assert.deepStrictEqual(await server.callTool('t', {}, SESSION), [text('second')]);
   });
 
   test("invokes async handlers and returns their result", async () => {
-    assert.deepStrictEqual(await makeServer().callTool('echo', { text: 'hi' }), [text('hi')]);
+    assert.deepStrictEqual(await makeServer().callTool('echo', { text: 'hi' }, SESSION), [text('hi')]);
   });
 
   test("invokes sync handlers and returns their result", async () => {
-    assert.deepStrictEqual(await makeServer().callTool('add', { a: 2, b: 3 }), [text('5')]);
+    assert.deepStrictEqual(await makeServer().callTool('add', { a: 2, b: 3 }, SESSION), [text('5')]);
   });
 
   test("returns an error block rather than throwing when a handler throws", async () => {
-    const result = await makeServer().callTool('fail', {});
+    const result = await makeServer().callTool('fail', {}, SESSION);
     assert.strictEqual(result.length, 1);
     assert.match((result[0] as TextBlock).data!, /error: .*boom/);
   });
 
   test("returns an error block rather than throwing for unknown tools", async () => {
-    const result = await makeServer().callTool('missing', {});
+    const result = await makeServer().callTool('missing', {}, SESSION);
     assert.deepStrictEqual(result, [text('tool not found')]);
+  });
+
+  test("passes the calling session to the handler", async () => {
+    const server = new LocalToolServer('local');
+    server.addTool<{}>('whoami', 'Returns the calling session', (_params, session) => [text(session)]);
+    assert.deepStrictEqual(await server.callTool('whoami', {}, 'session-a'), [text('session-a')]);
+    assert.deepStrictEqual(await server.callTool('whoami', {}, 'session-b'), [text('session-b')]);
   });
 
   test("rejects params that do not match the declared type without calling the handler", async () => {
     const server = new LocalToolServer('local');
     let calls = 0;
     server.addTool<{ text: string }>('echo', 'Echo', ({ text: t }) => { calls += 1; return [text(t)]; });
-    const result = await server.callTool('echo', { text: 42 });
+    const result = await server.callTool('echo', { text: 42 }, SESSION);
     assert.strictEqual(calls, 0);
     assert.match((result[0] as TextBlock).data!, /^Invalid params/);
   });
@@ -111,7 +121,7 @@ describe("LocalToolClient", () => {
     assert.strictEqual(client.hasTool('echo'), true);
     assert.strictEqual(client.hasTool('missing'), false);
     assert.deepStrictEqual(client.listTools(), server.listTools());
-    assert.deepStrictEqual(await client.callTool('echo', { text: 'via client' }), [text('via client')]);
+    assert.deepStrictEqual(await client.callTool('echo', { text: 'via client' }, SESSION), [text('via client')]);
   });
 
   test("forwards envelopes sent by the server to the client's onEnvelope", async () => {

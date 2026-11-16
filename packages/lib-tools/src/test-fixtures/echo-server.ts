@@ -15,6 +15,10 @@ server.addTool<{ ms: number }>('sleep', 'Resolves after the given delay', async 
   return [{ type: 'data', mime: 'text/plain', data: `slept ${ms}` }];
 });
 
+server.addTool<{}>('whoami', 'Returns the calling session', async (_params, session) => {
+  return [{ type: 'data', mime: 'text/plain', data: session }];
+});
+
 server.addTool<{}>('fail', 'Always throws', async () => {
   throw new Error('boom');
 });

@@ -25,10 +25,12 @@ export interface ToolCallBlock extends BaseBlock {
   call_id: string;
   tool: string;
   params: any;
+  session: string;
 }
 
 export interface ToolRespBlock extends BaseBlock {
   type: 'tool_resp';
   call_id: string;
   response: DataBlock[];
+  session: string;
 }

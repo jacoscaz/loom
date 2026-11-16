@@ -158,7 +158,7 @@ export class ProcessToolClient implements ToolClient {
     return Array.from(this.#tool_decls.values());
   }
 
-  async callTool(tool: string, params: any): Promise<DataBlock[]> {
+  async callTool(tool: string, params: any, session: string): Promise<DataBlock[]> {
     if (!this.#child || !this.running) {
       throw new Error('Process is not running');
     }
@@ -168,6 +168,7 @@ export class ProcessToolClient implements ToolClient {
       call_id,
       tool,
       params,
+      session,
     };
     const deferred = new Deferred<DataBlock[]>();
     // The derived promise must be handled, otherwise rejections surface as

@@ -5,6 +5,8 @@ import { ToolServerManager } from "./manager.js";
 import { LocalToolServer } from "../local/server.js";
 import { ECHO_SERVER } from "../test-fixtures/paths.js";
 
+const SESSION = 'test-session';
+
 const text = (data: string): TextBlock => ({ type: 'data', mime: 'text/plain', data });
 
 const makeServer = (name: string) => {
@@ -32,15 +34,15 @@ describe("ToolServerManager", () => {
     const manager = new ToolServerManager();
     await manager.addLocalServer(makeServer('alpha'));
     await manager.addLocalServer(makeServer('beta'));
-    assert.deepStrictEqual(await manager.callTool('alpha_echo', { text: 'x' }), [text('alpha:x')]);
-    assert.deepStrictEqual(await manager.callTool('beta_echo', { text: 'y' }), [text('beta:y')]);
+    assert.deepStrictEqual(await manager.callTool('alpha_echo', { text: 'x' }, SESSION), [text('alpha:x')]);
+    assert.deepStrictEqual(await manager.callTool('beta_echo', { text: 'y' }, SESSION), [text('beta:y')]);
   });
 
   test("throws for unknown tools", async () => {
     const manager = new ToolServerManager();
     await manager.addLocalServer(makeServer('alpha'));
-    await assert.rejects(manager.callTool('echo', {}), /tool echo not found/);
-    await assert.rejects(manager.callTool('alpha_missing', {}), /not found/);
+    await assert.rejects(manager.callTool('echo', {}, SESSION), /tool echo not found/);
+    await assert.rejects(manager.callTool('alpha_missing', {}, SESSION), /not found/);
   });
 
   test("stop() stops every registered server", async () => {
@@ -58,7 +60,7 @@ describe("ToolServerManager", () => {
     try {
       await manager.addProcessServer('proc', process.execPath, [ECHO_SERVER]);
       assert.ok(manager.listTools().some(d => d.name === 'proc_echo'));
-      assert.deepStrictEqual(await manager.callTool('proc_echo', { text: 'hi' }), [text('hi')]);
+      assert.deepStrictEqual(await manager.callTool('proc_echo', { text: 'hi' }, SESSION), [text('hi')]);
     } finally {
       await manager.stop();
     }

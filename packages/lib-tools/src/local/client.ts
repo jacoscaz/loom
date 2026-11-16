@@ -34,8 +34,8 @@ export class LocalToolClient implements ToolClient {
     return this.#server.listTools();
   }
 
-  async callTool(name: string, params: any): Promise<DataBlock[]> {
-    return this.#server.callTool(name, params);
+  async callTool(name: string, params: any, session: string): Promise<DataBlock[]> {
+    return this.#server.callTool(name, params, session);
   }
 
   onEnvelope = async (envelope: EnvelopeBlock, client: LocalToolClient) => {

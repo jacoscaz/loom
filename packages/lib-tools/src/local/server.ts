@@ -10,9 +10,9 @@ interface ToolEntry<P> {
 
 const wrapHandler = <P>(handler: ToolHandler<P>, params_type?: ReceiveType<P>): ToolHandler<P> => {
   params_type = resolveReceiveType(params_type);
-  return async (params: any) => {
+  return async (params: any, session: string) => {
     if (is<P>(params, params_type)) {
-      return handler(params);
+      return handler(params, session);
     }
     return [{ type: 'data', mime: 'text/plain', data: `Invalid params: ${JSON.stringify(params)}` }];
   };
@@ -59,12 +59,12 @@ export class LocalToolServer implements ToolServer {
     this.#tools.set(name, entry);
   }
 
-  async callTool(name: string, params: any): Promise<DataBlock[]> {
+  async callTool(name: string, params: any, session: string): Promise<DataBlock[]> {
     let response: DataBlock[];
     if (this.#tools.has(name)) {
       const { handler } = this.#tools.get(name)!;
       try {
-        response = await handler(params);
+        response = await handler(params, session);
       } catch (err) {
         response = [{
           type: 'data',

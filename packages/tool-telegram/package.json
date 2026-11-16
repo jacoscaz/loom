@@ -1,0 +1,25 @@
+{
+  "name": "@loom/telegram",
+  "main": "dist/index.js",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "ts:clear": "rm -rf ./dist",
+    "ts:build": "tsc",
+    "ts:watch": "tsc --watch",
+    "test": "node --enable-source-maps --test 'dist/**/*.test.js'",
+    "build": "npm run ts:clear && npm run ts:build",
+    "watch": "npm run ts:clear && npm run ts:watch"
+  },
+  "devDependencies": {
+    "@runtyped/typescript": "^2.0.0",
+    "@types/node": "^26.0.1"
+  },
+  "dependencies": {
+    "@loom/proto": "0.0.1",
+    "@loom/tools": "0.0.1",
+    "@loom/utils": "0.0.1",
+    "@runtyped/type": "^2.0.0",
+    "pinetto": "^4.0.0"
+  }
+}

@@ -54,12 +54,12 @@ export class ToolServerManager {
       .map(([name, { decl }]) => ({ ...decl, name }));
   }
 
-  async callTool(name: string, params: any): Promise<DataBlock[]> {
+  async callTool(name: string, params: any, session: string): Promise<DataBlock[]> {
     if (!this.#tools.has(name)) {
       throw new Error(`tool ${name} not found`);
     }
     const { client, decl } = this.#tools.get(name)!;
-    return client.callTool(decl.name, params);
+    return client.callTool(decl.name, params, session);
   }
 
   onEnvelope = async (envelope: EnvelopeBlock, client: ToolClient) => {

@@ -3,7 +3,7 @@ import { Block, EnvelopeBlock, ToolCallBlock, ToolDeclBlock, ToolRespBlock, Data
 import pinetto, { type Logger } from "pinetto";
 import { encodeBlock, readBlocks } from "../framing/framing.js";
 import { LocalToolServer } from "../local/server.js";
-import { ToolServer } from "../types.js";
+import { ToolHandler, ToolServer } from "../types.js";
 
 let singleton: ProcessToolServer | undefined;
 
@@ -34,7 +34,7 @@ export class ProcessToolServer implements ToolServer {
     return this.#server.hasTool(name);
   }
 
-  addTool<T>(name: string, description: string, handler: (params: T) => Promise<DataBlock[]>, __type_T?: ReceiveType<T>) {
+  addTool<T>(name: string, description: string, handler: ToolHandler<T>, __type_T?: ReceiveType<T>) {
     __type_T = resolveReceiveType(__type_T);
     this.#server.addTool<T>(name, description, handler, __type_T);
     // Announce the new tool so that the client can update its declarations.
@@ -45,8 +45,8 @@ export class ProcessToolServer implements ToolServer {
     return this.#server.listTools();
   }
 
-  callTool(name: string, params: any): DataBlock[] | Promise<DataBlock[]> {
-    return this.#server.callTool(name, params);
+  callTool(name: string, params: any, session: string): DataBlock[] | Promise<DataBlock[]> {
+    return this.#server.callTool(name, params, session);
   }
 
   #onStdinBlock = async (block: Block): Promise<void> => {
@@ -59,8 +59,8 @@ export class ProcessToolServer implements ToolServer {
   };
 
   #onToolCallBlock = async (block: ToolCallBlock): Promise<void> => {
-    const { tool, params } = block;
-    const response: DataBlock[] = await Promise.resolve(this.callTool(tool, params)).catch((err) => {
+    const { tool, params, session } = block;
+    const response: DataBlock[] = await Promise.resolve(this.callTool(tool, params, session)).catch((err) => {
       return [{
         type: 'data',
         mime: 'text/plain',
@@ -71,6 +71,7 @@ export class ProcessToolServer implements ToolServer {
       type: 'tool_resp',
       call_id: block.call_id,
       response,
+      session,
     });
   };
 
