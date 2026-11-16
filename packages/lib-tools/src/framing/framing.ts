@@ -1,7 +1,7 @@
 import { is } from "@runtyped/type";
 import { StringDecoder } from "node:string_decoder";
 import type { Readable } from "node:stream";
-import { Block } from "./blocks/index.js";
+import { Block } from "@loom/proto";
 
 /**
  * Upper bound for a single buffered line. Partial lines exceeding this are

@@ -7,7 +7,7 @@ export * from "./envelopes.js";
 
 
 import { TextBlock, AudioBlock, ImageBlock } from './data.js';
-import { ToolCallBlock, ToolDeclBlock, ToolRespBlock } from "./tools.js";
+import { ToolCallBlock, ToolDeclBlock, ToolRespBlock, ToolListBlock } from "./tools.js";
 import { ThinkingBlock, ThinkingRedactedBlock } from "./thinking.js";
 import { RefusalBlock } from "./others.js";
 import { EnvelopeBlock } from "./envelopes.js";
@@ -19,6 +19,7 @@ export type Block =
   | ToolCallBlock
   | ToolDeclBlock
   | ToolRespBlock
+  | ToolListBlock
   | ThinkingBlock
   | ThinkingRedactedBlock
   | RefusalBlock

@@ -2,8 +2,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert";
 import { PassThrough } from "node:stream";
 import { encodeBlock, readBlocks } from "./framing.js";
-import type { Block, TextBlock } from "./blocks/index.js";
-import { waitFor } from "./test-utils.js";
+import type { Block, TextBlock } from "@loom/proto";
+import { waitFor } from "@loom/utils";
 
 const text = (data: string): TextBlock => ({ type: 'data', mime: 'text/plain', data });
 

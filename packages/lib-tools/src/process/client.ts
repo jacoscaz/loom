@@ -1,25 +1,27 @@
 
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { Block, DataBlock } from "../blocks/index.js";
-import { ToolCallBlock, ToolDeclBlock, ToolRespBlock } from "../blocks/tools.js";
+import { ToolCallBlock, ToolDeclBlock, ToolRespBlock, EnvelopeBlock, DataBlock, Block, ToolListBlock } from "@loom/proto";
 import { nonSafeRandom, Deferred } from "@loom/utils";
-import { EnvelopeBlock } from "../blocks/envelopes.js";
-import { encodeBlock, readBlocks } from "../framing.js";
+import { encodeBlock, readBlocks } from "../framing/framing.js";
+import { ToolClient } from "../types.js";
 
 
-export interface ProcessOpts {
+// export interface ProcessToolServerOpts extends ToolServerOpts<ProcessToolServer> {
   // absolute path to the program to run
-  name: string;
-  file: string;
-  args: string[];
-  onProcessExit: (code: number | null, signal: string | null, process: Process) => void;
-  onToolDeclBlock: (block: ToolDeclBlock, process: Process) => Promise<void>;
-  onEnvelopeBlock: (envelope: EnvelopeBlock, process: Process) => Promise<void>;
-}
+  // name: string;
+  // file: string;
+  // args: string[];
+  // onProcessExit: (code: number | null, signal: string | null, server: ProcessToolServer) => void;
+  // onToolDecl: (block: ToolDeclBlock, server: ProcessToolServer) => void | Promise<void>;
+  // onEnvelope: (envelope: EnvelopeBlock, server: ProcessToolServer) => void | Promise<void>;
+// }
 
-export class Process {
+export class ProcessToolClient implements ToolClient {
 
-  #opts: ProcessOpts;
+  #name: string;
+  #file: string;
+  #args: string[];
+
   #child?: ChildProcessWithoutNullStreams;
   #detachStdout?: () => void;
   #tool_calls: Map<string, { block: ToolCallBlock, deferred: Deferred<DataBlock[]> }>;
@@ -27,15 +29,18 @@ export class Process {
   #stopped: boolean;
   #restart_timer?: NodeJS.Timeout;
 
-  constructor(opts: ProcessOpts) {
-    this.#opts = opts;
+  constructor(name: string, file: string, args: string[]) {
+    this.#name = name;
+    this.#file = file;
+    this.#args = args;
+
     this.#tool_calls = new Map();
     this.#tool_decls = new Map();
     this.#stopped = true;
   }
 
   get name(): string {
-    return this.#opts.name;
+    return this.#name;
   }
 
   get running(): boolean {
@@ -55,8 +60,7 @@ export class Process {
     if (this.running) {
       return;
     }
-    const { file, args } = this.#opts;
-    this.#child = spawn(file, args, {
+    this.#child = spawn(this.#file, this.#args, {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.#child.on('exit', this.#onExit);
@@ -75,7 +79,6 @@ export class Process {
     tool_calls.forEach(({ block, deferred }) => {
       deferred.reject(new Error('process exited'));
     });
-    this.#opts.onProcessExit(code, signal, this);
     if (!this.#stopped) {
       this.#restart_timer = setTimeout(this.#start, 5_000);
     }
@@ -117,6 +120,8 @@ export class Process {
         return this.#onToolRespBlock(block);
       case 'tool_decl':
         return this.#onToolDeclBlock(block);
+      case 'tool_list':
+        return this.#onToolListBlock(block);
       case 'envelope':
         return this.#onEnvelopeBlock(block);
       default:
@@ -126,7 +131,13 @@ export class Process {
 
   #onToolDeclBlock = async (block: ToolDeclBlock) => {
     this.#tool_decls.set(block.name, block);
-    return this.#opts.onToolDeclBlock(block, this);
+  };
+
+  #onToolListBlock = async (block: ToolListBlock) => {
+    this.#tool_decls.clear();
+    for (const decl of block.tools) {
+      this.#tool_decls.set(decl.name, decl);
+    }
   };
 
   #onToolRespBlock = async (block: ToolRespBlock) => {
@@ -136,8 +147,16 @@ export class Process {
   };
 
   #onEnvelopeBlock = async (block: EnvelopeBlock) => {
-    return this.#opts.onEnvelopeBlock(block, this);
+    return this.onEnvelope(block, this);
   };
+
+  hasTool(name: string): boolean {
+    return this.#tool_decls.has(name);
+  }
+
+  listTools(): ToolDeclBlock[] {
+    return Array.from(this.#tool_decls.values());
+  }
 
   async callTool(tool: string, params: any): Promise<DataBlock[]> {
     if (!this.#child || !this.running) {
@@ -161,6 +180,8 @@ export class Process {
     return deferred.promise;
   };
 
+  onEnvelope = async (block: EnvelopeBlock, client: ToolClient) => {
 
+  };
 
 }

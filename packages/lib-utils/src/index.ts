@@ -23,6 +23,7 @@ export {
   setMap,
   addressInfoToString,
   pick,
+  waitFor,
 } from './utils.js';
 
 export {

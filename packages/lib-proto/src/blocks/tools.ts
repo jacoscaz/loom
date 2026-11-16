@@ -8,12 +8,17 @@ import { DataBlock } from './data.js';
  * ============================================================================
  */
 
- export interface ToolDeclBlock extends BaseBlock {
-   type: 'tool_decl';
-   name: string;
-   description: string;
-   params_schema: any;
- }
+export interface ToolDeclBlock extends BaseBlock {
+  type: 'tool_decl';
+  name: string;
+  description: string;
+  params_schema: any;
+}
+
+export interface ToolListBlock extends BaseBlock {
+  type: 'tool_list';
+  tools: ToolDeclBlock[];
+}
 
 export interface ToolCallBlock extends BaseBlock {
   type: 'tool_call';
