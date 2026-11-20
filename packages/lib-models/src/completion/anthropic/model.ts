@@ -2,13 +2,13 @@ import Anthropic from '@anthropic-ai/sdk';
 import { type ProjectOptions, projectMessages } from "@loom/proto";
 import {
   AbstractCompletionModel,
-  type CompletionModelOpts,
+  CompletionModelOpts, // value import: keeps runtime type reflection of the opts
   type CompletionQueryOpts,
   type CompletionQueryResult,
 } from "../abstract.js";
 import type { ReasoningEffort } from "../../reasoning.js";
 import { warnOnTextualToolCalls } from "../shared.js";
-import { formatMessages, type PromptCacheTTL } from "./formatters.js";
+import { formatMessages, PromptCacheTTL } from "./formatters.js";
 import { parseMessage } from "./parsers.js";
 
 export interface AnthropicCompletionModelOpts extends CompletionModelOpts {

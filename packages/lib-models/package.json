@@ -1,5 +1,5 @@
 {
-  "name": "@loom/lib-models",
+  "name": "@loom/models",
   "main": "dist/index.js",
   "version": "0.0.1",
   "type": "module",

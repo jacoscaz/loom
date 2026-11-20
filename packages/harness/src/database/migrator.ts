@@ -4,10 +4,23 @@ import {
   Migrator,
   FileMigrationProvider
 } from 'kysely/migration';
-import { type DB, ensureNoTrx } from './client.js';
-import { type Logger } from 'pinetto';
+import { type DB, ensureNoTrx, sql } from './client.js';
 
-export const migrateToLatest = async (db: DB, logger: Logger) => {
+interface MigrationLogger {
+  debug(message: string, ...args: any[]): void;
+  error(message: string, ...args: any[]): void;
+}
+
+/**
+ * Brings the database up to date. When `schema` is given it is created if
+ * missing; the connection's search_path (see getDB()) makes every
+ * unqualified table, including Kysely's migration bookkeeping, live there.
+ */
+export const migrateToLatest = async (db: DB, logger: MigrationLogger, schema?: string) => {
+
+  if (schema) {
+    await sql`CREATE SCHEMA IF NOT EXISTS ${sql.id(schema)}`.execute(db);
+  }
 
   const migrator = new Migrator({
     db: ensureNoTrx(db),

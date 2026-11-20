@@ -1,6 +1,6 @@
 import { is, ReceiveType, resolveReceiveType, toJsonSchema } from "@runtyped/type";
 import { Block, EnvelopeBlock, ToolCallBlock, ToolDeclBlock, ToolRespBlock, DataBlock } from "@loom/proto";
-import pinetto, { type Logger } from "pinetto";
+import pinetto, { ProcessWriter, type Logger } from "pinetto";
 import { encodeBlock, readBlocks } from "../framing/framing.js";
 import { LocalToolServer } from "../local/server.js";
 import { ToolHandler, ToolServer } from "../types.js";
@@ -22,7 +22,7 @@ export class ProcessToolServer implements ToolServer {
     readBlocks(process.stdin, this.#onStdinBlock);
     this.logger = pinetto({
       prefix: `process:${name}`,
-      writer: process.stderr,
+      writer: new ProcessWriter('stderr'),
     });
   }
 

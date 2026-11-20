@@ -16,8 +16,8 @@ export class ToolServerManager {
     this.#clients = new Map();
   }
 
-  #onEnvelope = async (block: EnvelopeBlock, process: ToolClient) => {
-
+  #onEnvelope = async (envelope: EnvelopeBlock, client: ToolClient) => {
+    return this.onEnvelope(envelope, client);
   };
 
   #registerServer = async (client: ToolClient) => {
@@ -62,7 +62,12 @@ export class ToolServerManager {
     return client.callTool(decl.name, params, session);
   }
 
-  onEnvelope = async (envelope: EnvelopeBlock, client: ToolClient) => {
+  /**
+   * Invoked for every envelope sent by any registered tool server. Meant to
+   * be overridden by the host; the returned promise is awaited by the
+   * sending server, so resolving it acknowledges receipt.
+   */
+  onEnvelope = async (envelope: EnvelopeBlock, client: ToolClient): Promise<void> => {
 
   };
 

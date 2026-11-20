@@ -1,29 +1,28 @@
 # Example configuration file for Loom.
 #
+# Usage: node packages/harness/dist/server.js config.toml
+#
 # String values using the "${VAR}" placeholder syntax will be replaced with
 # the referenced environment variable (from .env or the process environment).
+# See .env-example for the variables referenced below.
 #
 # Validation: the loader casts the parsed config against the Config type and
 # diffs the result against the raw parse — any key silently stripped by
 # validation is a boot ERROR naming the exact path. Unknown keys are rejected
-# everywhere EXCEPT the open regions of the type (e.g. a model's
+# everywhere EXCEPT the open regions of the type (e.g. the model's
 # `options.extras` block, where adapter-specific payloads ride by design).
 #
-# Style discipline for session-model entries: dotted keys only. Never use
-# sub-table headers like [models.session.options] — in TOML they attach to
-# the LAST defined [[models.session]] element and misread badly in lists.
+# Style discipline: use dotted keys (options.model = ...) rather than
+# sub-table headers like [model.options].
 
 # =============================================================================
 #                               GENERAL OPTIONS
 # =============================================================================
 
-# Timezone for the application. IANA time zone name (e.g. "Europe/London").
-tz = "${TZ}"
-
 # Optional. Pid file backing the single-instance guard: the first thing
 # the harness does at boot is check this file. A second instance finding
 # a live pid file exits immediately instead of racing the first for the
-# database and the continuity store. A stale file (recorded pid dead, or
+# database and the Telegram bot. A stale file (recorded pid dead, or
 # corrupt contents — e.g. after a hard kill or power loss) is reclaimed
 # with a warning, so a crash can never wedge subsequent boots.
 # Defaults to harness.pid at the level of the harness package.json.
@@ -39,246 +38,127 @@ tz = "${TZ}"
 # Supported values: "trace", "debug", "info", "warn", "error"
 level = "info"
 
-# Whether to prefix log messages with a (date)timestamp. Boolean. Optional.
+# Optional. Whether to prefix log messages with a (date)timestamp.
+# Defaults to true.
 datetime = false
-
-# Optional. Directory for the monologue log — the human-facing
-# mirror of the session stream — and its rotated files.
-# Defaults to /var/log/loom.
-# monologue_dir = "/var/log/loom"
-
-# =============================================================================
-#                                 EMAIL / JMAP
-# =============================================================================
-
-[mail]
-
-# JMAP mail integration. Inbound mail from allowlisted senders arrives
-# as `mail/arrived` events that activate the agent.
-
-# JMAP API endpoint for mail operations.
-api_url = 'https://api.fastmail.com/jmap/api'
-
-# JMAP session discovery URL.
-session_url = 'https://api.fastmail.com/jmap/session'
-
-# API token for authentication. Generate in your provider's settings.
-api_token = "${JMAP_API_TOKEN}"
-
-# The agent's own email address.
-email_address = "agent@example.com"
-
-# Optional. Inbox polling interval in milliseconds.
-poll_interval_ms = 120000
-
-# =============================================================================
-#                                 TELEGRAM
-# =============================================================================
-
-[telegram]
-
-# Telegram Bot API integration.
-
-# A bot token is obtained from @BotFather.
-api_token = "${TELEGRAM_API_TOKEN}"
-
-# Optional. Long-poll interval in seconds for getUpdates (Telegram timeout).
-poll_timeout_seconds = 30
-
-# Optional. Directory where downloaded media (photos) are stored.
-# Defaults to <cwd>/media/telegram.
-# media_dir = "/var/lib/loom/media/telegram"
-
-# =============================================================================
-#                                 HEARTBEAT
-# =============================================================================
-
-# Heartbeat: keeps the agent present between prompts. The harness ticks
-# on `interval`; a heartbeat-driven activation fires only if at least
-# `activation_interval_ms` have passed since the last activation — so
-# the effective rhythm is "N time of quiet", not N of clock time.
-# `quiet_after_ms` suppresses synthetic activations right after ANY
-# activation, keeping heartbeats out of the middle of ongoing work.
-
-[heartbeat]
-
-# Heartbeat interval in milliseconds — cheap internal poll cadence.
-interval = 30000
-
-# Minimum quiet time before a heartbeat-driven activation fires.
-# 2 hours is a reasonable starting presence rhythm.
-activation_interval_ms = 7200000
-
-# No synthetic activation for this long after ANY activation.
-quiet_after_ms = 600000
 
 # =============================================================================
 #                                  POSTGRES
 # =============================================================================
 
+# Conversation history: one row per message, grouped by session (one
+# session per Telegram chat). Incoming messages are stored before the
+# Telegram update is confirmed, and sessions with unprocessed messages are
+# resumed at boot, so nothing is lost across crashes and restarts.
+
 [postgres]
 
-# Continuity store: anchors, logs, notes, todos, facts, messages.
-port = "${POSTGRES_PORT}"
 hostname = "${POSTGRES_HOSTNAME}"
+port = "${POSTGRES_PORT}"
 database = "${POSTGRES_DATABASE}"
 username = "${POSTGRES_USERNAME}"
 password = "${POSTGRES_PASSWORD}"
 
+# Optional. Schema holding the harness' tables, created at boot if missing.
+# Defaults to the connection's search_path (usually "public"). The schema
+# is NOT compatible with the one of the pre-refactor harness: when reusing
+# a database that holds old data, set a dedicated schema here.
+schema = "harness"
+
 # =============================================================================
-#                                  MODELS
+#                                  TELEGRAM
 # =============================================================================
 
-[models]
+[telegram]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Session models: generate all agent activations. An ARRAY of tables —
-# the first entry is the default every session starts on; the agent can
-# switch to any other entry at runtime via the switch_substrate tool.
-# Restarts reset to the first entry. Reference models by their `id`,
-# never by array position. Use models optimized for agentic workflows
-# if possible.
-# ─────────────────────────────────────────────────────────────────────────────
+# Telegram Bot API integration. Each Telegram chat is a separate session
+# ("telegram:<chat_id>") with its own history.
 
-[[models.session]]
+# A bot token is obtained from @BotFather.
+api_token = "${TELEGRAM_API_TOKEN}"
 
-# Harness-internal unique model id.
-id = 'provider/model-name'
+# Optional but strongly recommended. Telegram user ids allowed to talk to
+# the agent; messages from anyone else are dropped. When absent, anyone
+# who finds the bot can talk to it.
+# allowed_user_ids = [123456789]
 
-# Optional. Declarative selection guidance, surfaced in the boot event's
-# available-models menu — helps the agent choose substrates without
-# a-priori knowledge of their strengths/weaknesses.
-guidance = 'example: fast and cheap, multimodal — default for presence and visual work'
+# Optional. Long-poll interval in seconds for getUpdates (Telegram timeout).
+poll_timeout_seconds = 30
 
-# Supported adapters: 'openai' (any OpenAI-compatible inference provider)
-# and 'anthropic' (direct API with explicit prompt caching).
-adapter = 'openai'
+# Optional. Directory where media downloaded via the telegram_file tool is
+# stored. Defaults to <cwd>/media/telegram.
+# media_dir = "/var/lib/loom/media/telegram"
 
-# The provider-side model name and credentials.
-options.model = "provider/model-name"
-options.api_key = "${PROVIDER_API_KEY}"
-# Optional. Override the default base URL for OpenAI-compatible providers.
-options.base_url = 'https://api.provider.example/v1'
-# Optional. Reasoning effort for reasoning-capable models.
-# options.reasoning.effort = 'high'
-# Optional. Replay reasoning traces back to the model on follow-ups.
-# replay_thinking = true
-# Extra options passed to the inference provider at query time.
-# Use for provider-specific options such as `provider` selection
-# criteria for OpenRouter. This is an OPEN region: keys here are
-# passed through as-is.
-# options.extras = {}
+# =============================================================================
+#                                   MODEL
+# =============================================================================
 
-# Output token budget per activation.
-max_output_size = 20000
+# The completion model driving the agent, queried through @loom/models.
+
+[model]
+
+# Supported adapters: 'anthropic' (direct API with explicit prompt
+# caching), 'openai' (any OpenAI-compatible inference provider) and
+# 'tensorx'.
+adapter = 'anthropic'
+
+# Provider-side model name and credentials.
+options.model = "claude-opus-5-5"
+options.api_key = "${ANTHROPIC_API_KEY}"
+# Optional. Override the provider's default base URL.
+# options.base_url = 'https://api.provider.example/v1'
+
+# Output token budget per model query.
+options.max_output_size = 20000
 # Context window of the model.
-max_context_size = 1000000
+options.max_context_size = 200000
 # Stall timeout for model queries, in milliseconds. The timer measures
 # SILENCE, not total duration: it re-arms on every stream chunk received
 # from the provider, so long-running or slow-thinking queries are never
 # killed while healthy — only a connection that goes silent for this
 # long is aborted.
-timeout = 60000
+options.timeout = 60000
 
-# Input modalities the model supports. Enable images to let the agent
-# see photos (e.g. those downloaded via the telegram package's photo
-# tool); audio to project voice notes as native audio input.
-# modalities.images = true
-# modalities.audio = true
+# Optional. Input modalities the model supports. Enable images to let the
+# agent see photos sent over Telegram; audio to receive voice notes as
+# native audio input (voice notes are not transcribed otherwise).
+# options.modalities.images = true
+# options.modalities.audio = true
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Dedicated models below are STATIC — deliberately NOT part of the
-# switchable session array.
-# ─────────────────────────────────────────────────────────────────────────────
+# Optional. Replay reasoning traces back to the model on follow-ups.
+# True for DeepSeek and Anthropic, false for most others.
+# options.replay_thinking = true
 
-# Dedicated distillation model (continuity-record maintenance).
-# Distillation quality compounds, so it deserves a strong model
-# regardless of what substrate a session has switched to.
-[models.distillation]
-id = 'distillation'
-adapter = 'openai'
-options.model = "provider/model-name"
-options.api_key = "${PROVIDER_API_KEY}"
-options.base_url = 'https://api.provider.example/v1'
-max_output_size = 20000
-max_context_size = 1000000
-timeout = 60000
+# Optional, 'anthropic' only. Prompt-caching TTL: '5m', '1h' or 'off'.
+# options.prompt_cache_ttl = '1h'
 
-# Dedicated compaction model. Same reasoning as distillation.
-[models.compaction]
-id = 'compaction'
-adapter = 'openai'
-options.model = "provider/model-name"
-options.api_key = "${PROVIDER_API_KEY}"
-options.base_url = 'https://api.provider.example/v1'
-max_output_size = 20000
-max_context_size = 1000000
-timeout = 60000
+# Optional, 'openai'/'tensorx' only. Reasoning effort for reasoning-capable
+# models: 'none', 'minimal', 'low', 'medium', 'high' or 'xhigh'.
+# options.reasoning_effort = 'high'
 
-# Embedding model: computes vector representations of continuity
-# records and similarity queries.
-[models.embedding]
-adapter = 'openai'
-options.model = 'provider/embedding-model'
-options.api_key = "${PROVIDER_API_KEY}"
-options.base_url = 'https://api.provider.example/v1'
-# Optional. Vector dimensionality produced by this model. The continuity
-# store's embedding column is aligned to this at every boot (null-and-
-# rebuild on mismatch — plan for re-embedding when changing models).
-# options.dimensions = 1536
+# Optional. Extra options passed to the inference provider at query time,
+# e.g. `provider` selection criteria for OpenRouter. This is an OPEN
+# region: keys here are passed through as-is.
+# options.extras = {}
 
-# Optional. Transcription (speech-to-text) model — OpenAI-compatible
-# API. Enables voice-note transcription (e.g. Telegram voice messages).
-# [models.transcription]
+# Example: an OpenAI-compatible provider (here OpenRouter) instead.
 # adapter = 'openai'
-# options.model = 'whisper-1'
-# options.base_url = 'http://127.0.0.1:8178/v1'
-# Optional. Prompt biases the transcription vocabulary.
-# options.prompt = 'Names, places, and jargon the agent encounters often.'
-
-# Optional. Synthesis (text-to-speech) model — OpenAI-compatible API.
-# Enables outgoing voice notes (e.g. via the telegram package).
-# [models.synthesis]
-# adapter = 'openai'
-# options.model = 'kokoro-v1.0'
-# options.base_url = 'http://127.0.0.1:8179/v1'
-# options.voice = 'bm_fable'
-
-# Optional. Recollection extractor: gates and focuses recollection
-# queries. Small and fast is the point — it runs on every query.
-# When absent, the recaller performs no automatic recollection at all
-# (zero injections) — grounding remains the agent's conscious work
-# via continuity queries.
-# [models.extraction]
-# id = 'provider/small-model'
-# adapter = 'openai'
-# options.model = 'provider/small-model'
-# options.api_key = "${PROVIDER_API_KEY}"
-# options.base_url = 'https://api.provider.example/v1'
-# max_output_size = 4096
-# max_context_size = 32768
-# timeout = 2500
+# options.model = "provider/model-name"
+# options.api_key = "${OPENROUTER_API_KEY}"
+# options.base_url = 'https://openrouter.ai/api/v1'
 
 # =============================================================================
-#                                  SESSION
+#                                   AGENT
 # =============================================================================
 
-# Optional. Session-run management. Defaults apply when absent.
-# [session]
+# Optional. Defaults apply when absent.
+# [agent]
 
-# Optional. Cap on activations per run before a fresh run is started.
-# max_activations_per_run = 500
+# Optional. Replaces the built-in system prompt (see
+# packages/harness/src/prompt.ts). It must tell the agent to reply through
+# the telegram_send_text tool: its plain-text output reaches nobody.
+# system_prompt = "..."
 
-# =============================================================================
-#                                   FILES
-# =============================================================================
-
-# Optional. Temp-file management. Defaults apply when absent.
-# [files]
-
-# Optional. Root directory for expiring temp files.
-# Defaults to <cwd>/media/tmp.
-# temp_dir = "/var/lib/loom/media/tmp"
-
-# Optional. Cleanup sweep interval in milliseconds. Default 60000.
-# cleanup_interval_ms = 60000
+# Optional. Maximum number of model queries per turn: bounds the cost of a
+# runaway tool-calling loop. Default 16.
+# max_steps_per_turn = 16

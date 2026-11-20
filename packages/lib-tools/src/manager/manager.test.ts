@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert";
-import type { TextBlock } from "@loom/proto";
+import type { EnvelopeBlock, TextBlock } from "@loom/proto";
 import { ToolServerManager } from "./manager.js";
 import { LocalToolServer } from "../local/server.js";
 import { ECHO_SERVER } from "../test-fixtures/paths.js";
@@ -43,6 +43,17 @@ describe("ToolServerManager", () => {
     await manager.addLocalServer(makeServer('alpha'));
     await assert.rejects(manager.callTool('echo', {}, SESSION), /tool echo not found/);
     await assert.rejects(manager.callTool('alpha_missing', {}, SESSION), /not found/);
+  });
+
+  test("forwards envelopes from local servers to onEnvelope", async () => {
+    const manager = new ToolServerManager();
+    const server = makeServer('alpha');
+    await manager.addLocalServer(server);
+    const received: { envelope: EnvelopeBlock, from: string }[] = [];
+    manager.onEnvelope = async (envelope, client) => { received.push({ envelope, from: client.name }); };
+    const envelope: EnvelopeBlock = { type: 'envelope', kind: 'message', from: 'test:1', session: SESSION, blocks: [text('hi')] };
+    await server.sendEnvelope(envelope);
+    assert.deepStrictEqual(received, [{ envelope, from: 'alpha' }]);
   });
 
   test("stop() stops every registered server", async () => {

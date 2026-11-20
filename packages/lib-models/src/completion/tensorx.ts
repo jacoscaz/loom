@@ -1,4 +1,4 @@
-import { OpenAICompletionModel, type OpenAICompletionModelOpts } from "./openai/model.js";
+import { OpenAICompletionModel, OpenAICompletionModelOpts } from "./openai/model.js";
 
 export const TENSORX_BASE_URL = 'https://api.tensorx.ai/v1';
 

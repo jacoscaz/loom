@@ -6,7 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import type { TextBlock } from "@loom/proto";
 import { LocalToolServer } from "@loom/tools";
-import pinetto from "pinetto";
+import pinetto, { ProcessWriter } from "pinetto";
 import { TelegramClient } from "./client.js";
 import { type TelegramConfig } from "./config.js";
 import { processUpdateWithRetry, updateToEnvelope, type TelegramLogger } from "./notifier.js";
@@ -66,7 +66,7 @@ export class TelegramToolServer extends LocalToolServer {
   constructor(opts: TelegramToolServerOpts) {
     super(opts.name ?? 'telegram');
     this.#config = opts;
-    this.#log = opts.logger ?? pinetto({ prefix: 'tools:telegram', writer: process.stderr });
+    this.#log = opts.logger ?? pinetto({ prefix: 'tools:telegram', writer: new ProcessWriter('stderr') });
     this.client = new TelegramClient(opts.api_token, opts.api_base);
     this.#registerTools();
   }

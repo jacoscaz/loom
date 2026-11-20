@@ -6,5 +6,9 @@
   },
   "references": [
     { "path": "../lib-utils" },
+    { "path": "../lib-proto" },
+    { "path": "../lib-tools" },
+    { "path": "../lib-models" },
+    { "path": "../tool-telegram" },
   ]
 }

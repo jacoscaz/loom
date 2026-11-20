@@ -4,7 +4,7 @@ import type { ChatCompletionStream } from "openai/lib/ChatCompletionStream.mjs";
 import { projectMessages } from "@loom/proto";
 import {
   AbstractCompletionModel,
-  type CompletionModelOpts,
+  CompletionModelOpts, // value import: keeps runtime type reflection of the opts
   type CompletionQueryOpts,
   type CompletionQueryResult,
 } from "../abstract.js";

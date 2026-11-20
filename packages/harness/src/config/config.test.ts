@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { findStrippedKeys, getConfigFromProcessArgv } from './config.js';
 
 test('findStrippedKeys flags unknown top-level keys', () => {
-  const raw = { tz: 'x', no_such_section: { a: 1 } };
-  const casted = { tz: 'x' };
+  const raw = { pid_file: 'x', no_such_section: { a: 1 } };
+  const casted = { pid_file: 'x' };
   assert.deepEqual(findStrippedKeys(raw, casted), ['no_such_section']);
 });
 
@@ -34,74 +34,26 @@ test('findStrippedKeys stays silent when open regions (extras) survive cast', ()
 });
 
 const MINIMAL_TOML = `
-tz = "Europe/Rome"
-
 [logging]
 level = "info"
 
-[mail]
-api_url = "https://mail.example/jmap/api"
-session_url = "https://mail.example/jmap/session"
-api_token = "token"
-email_address = "agent@example.com"
-
 [telegram]
 api_token = "token"
-
-[heartbeat]
-interval = 30000
-activation_interval_ms = 7200000
-quiet_after_ms = 600000
+allowed_user_ids = [1001]
 
 [postgres]
 database = "loom"
+port = 5432
 
-[models]
-
-[models.extraction]
-id = "extraction"
+[model]
 adapter = "openai"
-timeout = 1000
-max_output_size = 100
-max_context_size = 1000
-options.model = "m"
-options.api_key = "key"
-
-[[models.session]]
-id = "test-model"
-guidance = "test"
-adapter = "openai"
-timeout = 1000
-max_output_size = 100
-max_context_size = 1000
 options.model = "test-model"
 options.api_key = "key"
+options.timeout = 1000
+options.max_output_size = 100
+options.max_context_size = 1000
 options.extras.a_weird_adapter_option = true
-modalities.images = true
-
-[models.embedding]
-adapter = "openai"
-options.model = "embed"
-options.api_key = "key"
-options.dimensions = 1536
-
-[models.distillation]
-id = "distillation"
-adapter = "openai"
-timeout = 1000
-max_output_size = 100
-max_context_size = 1000
-options.model = "m"
-options.api_key = "key"
-
-[models.compaction]
-id = "compaction"
-adapter = "openai"
-timeout = 1000
-max_output_size = 100
-max_context_size = 1000
-options.model = "m"
-options.api_key = "key"
+options.modalities.images = true
 `;
 
 const withConfigFile = async (body: string, fn: (path: string) => Promise<void>) => {
@@ -121,15 +73,32 @@ const withConfigFile = async (body: string, fn: (path: string) => Promise<void>)
 test('getConfigFromProcessArgv parses a minimal TOML config, keeping open options', async () => {
   await withConfigFile(MINIMAL_TOML, async () => {
     const config = await getConfigFromProcessArgv();
-    assert.equal(config.tz, 'Europe/Rome');
-    assert.equal(config.models.session.length, 1);
-    assert.equal(config.models.session[0].id, 'test-model');
-    assert.equal(
-      ((config.models.session[0].options as Record<string, unknown>).extras as Record<string, unknown>).a_weird_adapter_option,
-      true,
-    );
-    assert.equal(config.models.session[0].modalities?.images, true);
-    assert.equal(config.postgres.database, 'loom');
+    assert.equal(config.model.adapter, 'openai');
+    assert.equal(config.model.options.model, 'test-model');
+    assert.equal(config.model.options.timeout, 1000);
+    assert.equal(config.model.options.extras?.a_weird_adapter_option, true);
+    assert.equal(config.model.options.modalities?.images, true);
+    assert.equal(config.telegram.api_token, 'token');
+    assert.deepEqual(config.telegram.allowed_user_ids, [1001]);
+    assert.equal(config.agent, undefined);
+    assert.deepEqual(config.postgres, { database: 'loom', port: 5432 });
+  });
+});
+
+test('getConfigFromProcessArgv fills env placeholders', async () => {
+  process.env.LOOM_TEST_TELEGRAM_TOKEN = 'from-env';
+  try {
+    await withConfigFile(MINIMAL_TOML.replace('api_token = "token"', 'api_token = "${LOOM_TEST_TELEGRAM_TOKEN}"'), async () => {
+      assert.equal((await getConfigFromProcessArgv()).telegram.api_token, 'from-env');
+    });
+  } finally {
+    delete process.env.LOOM_TEST_TELEGRAM_TOKEN;
+  }
+});
+
+test('getConfigFromProcessArgv rejects unknown adapters', async () => {
+  await withConfigFile(MINIMAL_TOML.replace('adapter = "openai"', 'adapter = "nope"'), async () => {
+    await assert.rejects(() => getConfigFromProcessArgv());
   });
 });
 
@@ -153,4 +122,34 @@ test('getConfigFromProcessArgv rejects malformed TOML', async () => {
   await withConfigFile('tz = [unclosed', async () => {
     await assert.rejects(() => getConfigFromProcessArgv());
   });
+});
+
+test('config-example.toml at the repository root is a valid config', async () => {
+  const example = resolve(import.meta.dirname, '../../../../config-example.toml');
+  const env_vars = {
+    POSTGRES_HOSTNAME: '127.0.0.1',
+    POSTGRES_PORT: '5432',
+    POSTGRES_DATABASE: 'loom',
+    POSTGRES_USERNAME: 'loom',
+    POSTGRES_PASSWORD: 'loom',
+    TELEGRAM_API_TOKEN: 'telegram-token',
+    ANTHROPIC_API_KEY: 'anthropic-key',
+  };
+  const env_backup = { ...process.env };
+  Object.assign(process.env, env_vars);
+  try {
+    await withConfigFile(await readFile(example, 'utf8'), async () => {
+      const config = await getConfigFromProcessArgv();
+      assert.equal(config.model.adapter, 'anthropic');
+      assert.equal(config.model.options.api_key, 'anthropic-key');
+      assert.equal(config.telegram.api_token, 'telegram-token');
+      assert.equal(config.postgres.schema, 'harness');
+      assert.equal(Number(config.postgres.port), 5432);
+    });
+  } finally {
+    for (const key of Object.keys(env_vars)) {
+      if (!(key in env_backup)) delete process.env[key];
+      else process.env[key] = env_backup[key];
+    }
+  }
 });

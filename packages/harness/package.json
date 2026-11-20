@@ -1,7 +1,7 @@
 {
   "name": "@loom/harness",
   "version": "0.0.1",
-  "description": "Framework for building agents",
+  "description": "Minimal agent harness: converse with an agent over Telegram",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
@@ -9,37 +9,35 @@
     "ts:build": "npm run ts:clean && tsc",
     "ts:watch": "npm run ts:clean && tsc --watch",
     "build": "npm run ts:build",
-    "test": "node --enable-source-maps --test \"dist/**/*.test.js\""
+    "test": "node --enable-source-maps --test \"dist/**/*.test.js\"",
+    "start": "node --enable-source-maps dist/server.js"
   },
   "author": "Jacopo Scazzosi <jacopo@scazzosi.com>",
   "homepage": "https://github.com/jacoscaz/loom",
   "license": "MIT",
   "devDependencies": {
     "@runtyped/typescript": "^2.0.0",
-    "@types/node": "^26.0.1",
-    "@types/ws": "^8.18.1"
+    "@types/node": "^26.0.1"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.127.0",
-    "@loom/utils": "^0.0.1",
+    "@loom/models": "0.0.1",
+    "@loom/proto": "0.0.1",
+    "@loom/telegram": "0.0.1",
+    "@loom/tools": "0.0.1",
+    "@loom/utils": "0.0.1",
     "@runtyped/type": "^2.0.0",
-    "@xterm/headless": "^6.0.0",
-    "croner": "^10.0.1",
-    "date-fns": "^4.4.0",
     "dotenv": "^17.4.2",
     "kysely": "^0.29.2",
     "kysely-postgres-js": "^3.0.0",
-    "openai": "^6.45.0",
     "pinetto": "^4.0.0",
     "postgres": "^3.4.9",
-    "sharp": "^0.35.4",
-    "smol-toml": "^1.9.0",
-    "uid": "^2.0.2",
-    "ws": "^8.21.0",
-    "zigpty": "^0.2.1"
+    "smol-toml": "^1.9.0"
   },
   "files": [
     "dist/**/*.js",
     "dist/**/*.d.ts"
-  ]
+  ],
+  "bin": {
+    "loom": "dist/server.js"
+  }
 }

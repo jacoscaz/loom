@@ -3,20 +3,25 @@ import type { Tables } from './tables.js';
 
 import { IsolationLevel, Kysely, sql, Transaction } from 'kysely';
 import { PostgresJSDialect } from 'kysely-postgres-js';
-import { Config } from '../config/config.js';
 import postgres from 'postgres';
+import { type ConfigPostgres } from '../config/config.js';
+import { decodeJson, encodeJson } from './json.js';
 
 export { sql };
 
 export type DB = Kysely<Tables> | Transaction<Tables>;
 
-export const getDB = (opts: Config): DB => {
+export const getDB = (opts: ConfigPostgres): Kysely<Tables> => {
   const dialect_client = postgres({
-    database: opts.postgres.database,
-    username: opts.postgres.username,
-    password: opts.postgres.password,
-    hostname: opts.postgres.hostname,
-    port: opts.postgres.port,
+    database: opts.database,
+    username: opts.username,
+    password: opts.password,
+    hostname: opts.hostname,
+    port: opts.port,
+    // Unqualified table names (ours and Kysely's migration bookkeeping)
+    // resolve to the configured schema. See migrateToLatest().
+    connection: opts.schema ? { search_path: opts.schema } : {},
+    onnotice: () => {},
     types: {
       timestamp: {
         to: 1114,
@@ -33,14 +38,14 @@ export const getDB = (opts: Config): DB => {
       jsonb: {
         to: 3802,
         from: [3802],
-        serialize: (v: any) => JSON.stringify(v),
-        parse: (v: string) => JSON.parse(v),
+        serialize: (v: any) => encodeJson(v),
+        parse: (v: string) => decodeJson(v),
       },
       json: {
         to: 114,
         from: [114],
-        serialize: (v: any) => JSON.stringify(v),
-        parse: (v: string) => JSON.parse(v),
+        serialize: (v: any) => encodeJson(v),
+        parse: (v: string) => decodeJson(v),
       },
       bigint: {
         to: 20,
@@ -61,13 +66,11 @@ export const getDB = (opts: Config): DB => {
       },
     },
   });
-  const db = new Kysely<Tables>({
+  return new Kysely<Tables>({
     dialect: new PostgresJSDialect({
       postgres: dialect_client,
     }),
-    // log: ['query', 'error'],
   });
-  return db;
 };
 
 export const isTrx = (db: DB): db is Transaction<Tables> => {

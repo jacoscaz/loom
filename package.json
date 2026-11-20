@@ -4,7 +4,8 @@
     "packages/lib-proto",
     "packages/lib-tools",
     "packages/lib-models",
-    "packages/tool-telegram"
+    "packages/tool-telegram",
+    "packages/harness"
   ],
   "devDependencies": {
     "@runtyped/typescript": "2.0.0",
@@ -15,6 +16,7 @@
     "ts:watch": "npm run ts:clean && tsc -b ./tsconfig.build.json --watch",
     "ts:clean": "rm -rf packages/*/dist && rm -f packages/*/tsconfig.tsbuildinfo && rm -f ./tsconfig.build.tsbuildinfo",
     "npm:clean": "rm -rf node_modules && rm -rf packages/*/node_modules",
+    "clean": "npm run ts:clean && npm run npm:clean",
     "build": "npm run ts:build",
     "test": "npm run --workspaces --if-present test"
   },
